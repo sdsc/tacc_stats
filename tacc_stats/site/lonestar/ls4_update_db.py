@@ -8,7 +8,7 @@ django.setup()
 from tacc_stats.site.lonestar import views
 from tacc_stats.pickler import MetaData as MetaData
 
-path = "/hpc/tacc_stats_site/lonestar/pickles"
+path = "/opt/xsede_stats/pickles"
 try:
     start = datetime.strptime(sys.argv[1],"%Y-%m-%d")
     end   = datetime.strptime(sys.argv[2],"%Y-%m-%d")

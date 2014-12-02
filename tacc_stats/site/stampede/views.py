@@ -57,7 +57,7 @@ def update_comp_info():
 def update(date,rerun=False):
     ld = lariat_utils.LariatData(directory = cfg.lariat_path,
                                  daysback = 2)
-    tz = pytz.timezone('US/Central')
+    tz = pytz.timezone('US/Pacific')
     pickle_dir = os.path.join(cfg.pickles_dir,date)
 
     ctr = 0
@@ -298,18 +298,18 @@ def index(request, **field):
     field['nj'] = job_list.count()
 
     # Computed Metrics
-    field['cat_job_list']  = job_list.filter(Q(cat__lte = 0.001) | Q(cat__gte = 1000)).exclude(cat = float('nan'))
+    field['cat_job_list']  = job_list.filter(Q(cat__lte = 0.001) | Q(cat__gte = 1000)).exclude(cat = None)
     
     completed_list = job_list.exclude(status__in=['CANCELLED','FAILED']).order_by('-id')
     field['idle_job_list'] = completed_list.filter(idle__gte = 0.99)
     field['mem_job_list'] = completed_list.filter(mem__lte = 30, queue = 'largemem')
 
     field['cpi_thresh'] = 1.5
-    field['cpi_job_list']  = completed_list.exclude(cpi = float('nan')).filter(cpi__gte = field['cpi_thresh'])
+    field['cpi_job_list']  = completed_list.exclude(cpi = None).filter(cpi__gte = field['cpi_thresh'])
     field['cpi_per'] = 100*field['cpi_job_list'].count()/float(completed_list.count())
 
     field['gigebw_thresh'] = 2**20
-    field['gigebw_job_list']  = completed_list.exclude(GigEBW = float('nan')).filter(GigEBW__gte = field['gigebw_thresh'])
+    field['gigebw_job_list']  = completed_list.exclude(GigEBW = None).filter(GigEBW__gte = field['gigebw_thresh'])
 
     field['idle_job_list'] = list_to_dict(field['idle_job_list'],'idle')
     field['cat_job_list'] = list_to_dict(field['cat_job_list'],'cat')
@@ -350,7 +350,7 @@ def hist_summary(job_list):
     first = 'cpi'
     second = 'flops'
 
-    tmp = job_list.exclude(Q(**{first : None}) | Q(**{first : float('nan')}) | Q(**{second : None}) | Q(**{second : float('nan')}))
+    tmp = job_list.exclude(Q(**{first : None}) | Q(**{second : None}))
 
     cpi = []
     gflops = []

@@ -2,7 +2,7 @@
 import os
 DIR = os.path.dirname(os.path.abspath(__file__))
 
-DEBUG = False
+DEBUG = True
 TEMPLATE_DEBUG = DEBUG
 
 ADMINS = (
@@ -12,20 +12,19 @@ ADMINS = (
 MANAGERS = ADMINS
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': 'tacc_stats_site_db',                     
-        'USER': 'rtevans',
-        'PASSWORD': '',
-        'HOST': 'tacc-stats',         
-        'PORT': '5432',               
-        },
+    'default' : {
+        'ENGINE' : 'django.db.backends.mysql',
+        'NAME' : 'xsede_stats_2',
+        'USER' : 'root',
+        'PASSWORD' : '',
+        'HOST' : 'localhost'
+        },        
     'xalt' : {
         'ENGINE' : 'django.db.backends.mysql',
         'NAME' : 'xalt',
-        'USER' : 'xaltUser',
-        'PASSWORD' : 'kutwgbh',
-        'HOST' : 'tacc-stats'
+        'USER' : 'root',
+        'PASSWORD' : '',
+        'HOST' : 'localhost'
         }        
     }
 
