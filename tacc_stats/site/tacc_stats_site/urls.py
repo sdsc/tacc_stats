@@ -17,6 +17,7 @@ urlpatterns = patterns('',
     # Uncomment the next line to enable the admin:
     url(r'^lonestar/', include('lonestar.urls', namespace="lonestar"),name='lonestar'),
     url(r'^stampede/', include('stampede.urls', namespace="stampede"),name='stampede'),
+    url(r'^comet/', include('comet.urls', namespace="comet"),name='comet'),
     
     url(r'^admin/', include(admin.site.urls)),
 )
