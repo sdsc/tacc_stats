@@ -36,7 +36,7 @@ ALLOWED_HOSTS = ['*']
 # http://en.wikipedia.org/wiki/List_of_tz_zones_by_name
 # although not all choices may be available on all operating systems.
 # In a Windows environment this must be set to your system time zone.
-TIME_ZONE = 'America/Chicago'
+TIME_ZONE = 'America/Los_Angeles'
 
 # Language code for this installation. All choices can be found here:
 # http://www.i18nguy.com/unicode/language-identifiers.html
@@ -139,7 +139,8 @@ INSTALLED_APPS = (
     # 'django.contrib.admindocs',
     'tacc_stats.site.stampede',
     'tacc_stats.site.lonestar',
-    'tacc_stats.site.comet'
+    'tacc_stats.site.comet',
+    'tacc_stats.site.gordon'
 )
 """
 TEMPLATE_CONTEXT_PROCESSORS=(
