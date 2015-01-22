@@ -5,7 +5,7 @@ from django.db.models import Q
 
 import os,sys,pwd
 from tacc_stats.analysis import exam
-from tacc_stats.site.stampede.models import Job, Host, TestInfo
+from tacc_stats.site.comet.models import Job, Host, TestInfo
 from tacc_stats.site.xalt.models import run
 import tacc_stats.cfg as cfg
 
@@ -28,8 +28,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from django.core.cache import cache,get_cache 
 import traceback
 
-def update_comp_info(thresholds):
-    
+def update_comp_info():
     schema_map = {'HighCPI' : ['cpi','>',1.5], 
                   'HighCPLD' : ['cpld','>',1.5], 
                   'Load_L1Hits' : ['Load_L1Hits','>',1.5], 
@@ -44,9 +43,6 @@ def update_comp_info(thresholds):
                   'LowFLOPS' : ['flops','<',10],
                   'VecPercent' : ['VecPercent','<',0.05],
                   'GigEBW' : ['GigEBW','>',1e7]}
-
-    for key,val in thresholds.iteritems():
-        schema_map[key][1:3] = val
 
     for name in schema_map:
         if TestInfo.objects.filter(test_name = name).exists():
@@ -248,14 +244,14 @@ def dates(request):
     field = {}
 
     field['date_list'] = sorted(date_list.iteritems())
-    return render_to_response("stampede/search.html", field)
+    return render_to_response("comet/search.html", field)
 
 def search(request):
 
     if 'jobid' in request.GET:
         try:
             job = Job.objects.get(id = request.GET['jobid'])
-            return HttpResponseRedirect("/stampede/job/"+str(job.id)+"/")
+            return HttpResponseRedirect("/comet/job/"+str(job.id)+"/")
         except: pass
     try:
         fields = request.GET.dict()
@@ -276,7 +272,7 @@ def search(request):
         return index(request, **fields)
     except: pass
 
-    return render(request, 'stampede/search.html', {'error' : True})
+    return render(request, 'comet/search.html', {'error' : True})
 
 
 def index(request, **field):
@@ -321,7 +317,7 @@ def index(request, **field):
     field['mem_job_list'] = list_to_dict(field['mem_job_list'],'mem')
     field['gigebw_job_list'] = list_to_dict(field['gigebw_job_list'],'GigEBW')
 
-    return render_to_response("stampede/index.html", field)
+    return render_to_response("comet/index.html", field)
 
 def list_to_dict(job_list,metric):
     job_dict={}
@@ -428,7 +424,7 @@ def master_plot(request, pk):
 
 def heat_map(request, pk):    
     data = get_data(pk)
-    hm = plots.HeatMap(k1=['intel_snb','intel_snb'],
+    hm = plots.HeatMap(k1=['intel_nhm','intel_nhm'],
                        k2=['CLOCKS_UNHALTED_REF',
                            'INSTRUCTIONS_RETIRED'],
                        lariat_data="pass")
@@ -510,8 +506,8 @@ def type_plot(request, pk, type_name):
     schema = build_schema(data,type_name)
     schema = [x.split(',')[0] for x in schema]
 
-    k1 = {'intel_snb' : [type_name]*len(schema)}
-    k2 = {'intel_snb': schema}
+    k1 = {'intel_nhm' : [type_name]*len(schema)}
+    k2 = {'intel_nhm': schema}
 
     tp = plots.DevPlot(k1=k1,k2=k2,lariat_data='pass')
     tp.plot(pk,job_data=data)
@@ -533,5 +529,5 @@ def type_detail(request, pk, type_name):
             temp.append(raw_stats[t,event]*scale)
         stats.append((times[t],temp))
 
-    return render_to_response("stampede/type_detail.html",{"type_name" : type_name, "jobid" : pk, "stats_data" : stats, "schema" : schema})
+    return render_to_response("comet/type_detail.html",{"type_name" : type_name, "jobid" : pk, "stats_data" : stats, "schema" : schema})
 

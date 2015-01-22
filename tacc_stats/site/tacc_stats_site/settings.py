@@ -2,7 +2,7 @@
 import os
 DIR = os.path.dirname(os.path.abspath(__file__))
 
-DEBUG = False
+DEBUG = True
 TEMPLATE_DEBUG = DEBUG
 
 ADMINS = (
@@ -12,20 +12,19 @@ ADMINS = (
 MANAGERS = ADMINS
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': 'tacc_stats_site_db',                     
-        'USER': 'rtevans',
-        'PASSWORD': '',
-        'HOST': 'tacc-stats',         
-        'PORT': '5432',               
-        },
+    'default' : {
+        'ENGINE' : 'django.db.backends.mysql',
+        'NAME' : 'xsede_stats_2',
+        'USER' : 'root',
+        'PASSWORD' : '',
+        'HOST' : 'localhost'
+        },        
     'xalt' : {
         'ENGINE' : 'django.db.backends.mysql',
         'NAME' : 'xalt',
-        'USER' : 'xaltUser',
-        'PASSWORD' : 'kutwgbh',
-        'HOST' : 'tacc-stats'
+        'USER' : 'root',
+        'PASSWORD' : '',
+        'HOST' : 'localhost'
         }        
     }
 
@@ -37,7 +36,7 @@ ALLOWED_HOSTS = ['*']
 # http://en.wikipedia.org/wiki/List_of_tz_zones_by_name
 # although not all choices may be available on all operating systems.
 # In a Windows environment this must be set to your system time zone.
-TIME_ZONE = 'America/Chicago'
+TIME_ZONE = 'America/Los_Angeles'
 
 # Language code for this installation. All choices can be found here:
 # http://www.i18nguy.com/unicode/language-identifiers.html
@@ -140,6 +139,8 @@ INSTALLED_APPS = (
     # 'django.contrib.admindocs',
     'tacc_stats.site.stampede',
     'tacc_stats.site.lonestar',
+    'tacc_stats.site.comet',
+    'tacc_stats.site.gordon'
 )
 """
 TEMPLATE_CONTEXT_PROCESSORS=(

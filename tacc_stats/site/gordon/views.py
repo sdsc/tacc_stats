@@ -5,7 +5,7 @@ from django.db.models import Q
 
 import os,sys,pwd
 from tacc_stats.analysis import exam
-from tacc_stats.site.stampede.models import Job, Host, TestInfo
+from tacc_stats.site.gordon.models import Job, Host, TestInfo
 from tacc_stats.site.xalt.models import run
 import tacc_stats.cfg as cfg
 
@@ -28,8 +28,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from django.core.cache import cache,get_cache 
 import traceback
 
-def update_comp_info(thresholds):
-    
+def update_comp_info():
     schema_map = {'HighCPI' : ['cpi','>',1.5], 
                   'HighCPLD' : ['cpld','>',1.5], 
                   'Load_L1Hits' : ['Load_L1Hits','>',1.5], 
@@ -44,9 +43,6 @@ def update_comp_info(thresholds):
                   'LowFLOPS' : ['flops','<',10],
                   'VecPercent' : ['VecPercent','<',0.05],
                   'GigEBW' : ['GigEBW','>',1e7]}
-
-    for key,val in thresholds.iteritems():
-        schema_map[key][1:3] = val
 
     for name in schema_map:
         if TestInfo.objects.filter(test_name = name).exists():
@@ -189,8 +185,9 @@ def sys_plot(request, pk):
 
     racks = []
     nodes = []
+    clust_name = ""
     for host in Host.objects.values_list('name',flat=True).distinct():
-        name,r,n=host.split('-')
+        clust_name,r,n=host.split('-')
         racks.append(r)
         nodes.append(n)
     racks = sorted(set(racks))
@@ -202,7 +199,7 @@ def sys_plot(request, pk):
     x = np.zeros((len(nodes),len(racks)))
     for r in range(len(racks)):
         for n in range(len(nodes)):
-            name = str(racks[r])+'-'+str(nodes[n])
+            name = clust_name+'-'+str(racks[r])+'-'+str(nodes[n])
             if name in hosts: x[n][r] = 1.0
 
     fig = Figure(figsize=(17,5))
@@ -248,14 +245,14 @@ def dates(request):
     field = {}
 
     field['date_list'] = sorted(date_list.iteritems())
-    return render_to_response("stampede/search.html", field)
+    return render_to_response("gordon/search.html", field)
 
 def search(request):
 
     if 'jobid' in request.GET:
         try:
             job = Job.objects.get(id = request.GET['jobid'])
-            return HttpResponseRedirect("/stampede/job/"+str(job.id)+"/")
+            return HttpResponseRedirect("/gordon/job/"+str(job.id)+"/")
         except: pass
     try:
         fields = request.GET.dict()
@@ -276,7 +273,7 @@ def search(request):
         return index(request, **fields)
     except: pass
 
-    return render(request, 'stampede/search.html', {'error' : True})
+    return render(request, 'gordon/search.html', {'error' : True})
 
 
 def index(request, **field):
@@ -321,7 +318,7 @@ def index(request, **field):
     field['mem_job_list'] = list_to_dict(field['mem_job_list'],'mem')
     field['gigebw_job_list'] = list_to_dict(field['gigebw_job_list'],'GigEBW')
 
-    return render_to_response("stampede/index.html", field)
+    return render_to_response("gordon/index.html", field)
 
 def list_to_dict(job_list,metric):
     job_dict={}
@@ -533,5 +530,5 @@ def type_detail(request, pk, type_name):
             temp.append(raw_stats[t,event]*scale)
         stats.append((times[t],temp))
 
-    return render_to_response("stampede/type_detail.html",{"type_name" : type_name, "jobid" : pk, "stats_data" : stats, "schema" : schema})
+    return render_to_response("gordon/type_detail.html",{"type_name" : type_name, "jobid" : pk, "stats_data" : stats, "schema" : schema})
 
