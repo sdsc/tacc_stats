@@ -492,7 +492,7 @@ class JobDetailView(DetailView):
         context['type_list'] = type_list
         context['host_list'] = host_list
 
-        urlstring="https://scribe.tacc.utexas.edu:8000/en-US/app/search/search?q=search%20kernel:"
+        urlstring="https://splunk.sdsc.edu:8000/en-US/app/search/search?q=search%20kernel:"
         hoststring=urlstring+"%20host%3D"+host_list[0]
         serverstring=urlstring+"%20mds*%20OR%20%20oss*"
         for host in host_list[1:]:
