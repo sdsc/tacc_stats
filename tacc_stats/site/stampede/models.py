@@ -23,6 +23,7 @@ class Job(models.Model):
     date = models.DateField(db_index=True,null=True)
     user = models.CharField(max_length=128, null=True)
     exe = models.CharField(max_length=128, null=True)
+    exec_path = models.CharField(max_length=1024, null=True)
     exe_list = models.TextField(null=True)
     cwd = models.CharField(max_length=128, null=True)
     threads = models.BigIntegerField(null=True)
@@ -66,6 +67,17 @@ class Host(models.Model):
 
     def __unicode__(self):
         return str(self.name)
+
+class Libraries(models.Model):
+    object_path = models.CharField(max_length=1024)
+    module_name = models.CharField(max_length=64)
+    jobs = models.ManyToManyField(Job)
+
+    class Meta: ordering = ('object_path',)
+
+    def __unicode__(self):
+        return str(self.object_path)
+
 
 class JobForm(ModelForm):
     class Meta:
