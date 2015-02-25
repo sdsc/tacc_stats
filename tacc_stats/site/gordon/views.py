@@ -192,7 +192,11 @@ def sys_plot(request, pk):
     clust_name = ""
     for host in Host.objects.values_list('name',flat=True).distinct():
         clust_name,r,n=host.split('-')
+<<<<<<< HEAD
         racks.append(r)
+=======
+        racks.append("{0:02d}".format(int(r)))
+>>>>>>> feature/my_changes
         nodes.append(n)
     racks = sorted(set(racks))
     nodes = sorted(set(nodes))
@@ -203,7 +207,11 @@ def sys_plot(request, pk):
     x = np.zeros((len(nodes),len(racks)))
     for r in range(len(racks)):
         for n in range(len(nodes)):
+<<<<<<< HEAD
             name = clust_name+'-'+str(racks[r])+'-'+str(nodes[n])
+=======
+            name = clust_name+'-'+str(int(racks[r]))+'-'+str(nodes[n])
+>>>>>>> feature/my_changes
             if name in hosts: x[n][r] = 1.0
 
     fig = Figure(figsize=(17,5))
@@ -492,7 +500,11 @@ class JobDetailView(DetailView):
         context['type_list'] = type_list
         context['host_list'] = host_list
 
+<<<<<<< HEAD
         urlstring="https://splunk.sdsc.edu:8000/en-US/app/search/search?q=search%20kernel:"
+=======
+        urlstring="https://scribe.tacc.utexas.edu:8000/en-US/app/search/search?q=search%20kernel:"
+>>>>>>> feature/my_changes
         hoststring=urlstring+"%20host%3D"+host_list[0]
         serverstring=urlstring+"%20mds*%20OR%20%20oss*"
         for host in host_list[1:]:
