@@ -5,6 +5,7 @@
 #include <limits.h>
 #include <stdarg.h>
 #include <sys/utsname.h>
+#include <string.h>
 
 //#include <syslog.h>
 #ifdef RMQ
@@ -32,27 +33,59 @@
     asprintf(&(sf->sf_data), "%s"fmt, sf->sf_data, ##args);		\
     fprintf(sf->sf_file, fmt, ##args);					\
   } while (0)
+
+static char * readFile(char* path) {
+  char * buffer = 0;
+  long length;
+  FILE * f = fopen (path, "rb");
+  if(!f)
+    return 0;
+  fseek (f, 0, SEEK_END);
+  length = ftell (f);
+  fseek (f, 0, SEEK_SET);
+  buffer = malloc (length);
+  fread (buffer, 1, length, f);
+  fclose (f);
+
+  char *pos;
+  if ((pos=strchr(buffer, '\n')) != NULL) 
+    *pos = '\0';
+
+  return buffer;
+}
+
 static int rmq_send(struct stats_file *sf)
 {
+  char * server_url = readFile("/opt/rocks/etc/rabbitmq.conf");
+  char * passwd = readFile("/opt/rocks/etc/rabbitmq_xsede_stats.conf");
+  if(!server_url || !passwd)
+    return 1;
   int status;
   char const *exchange;
   char const *routingkey;
   amqp_socket_t *socket = NULL;
   amqp_connection_state_t conn;
-  exchange = "amq.direct";
-  routingkey = "tacc_stats";
+  exchange = "stats-listener";
+  routingkey = "";
   conn = amqp_new_connection();
   socket = amqp_tcp_socket_new(conn);
-  status = amqp_socket_open(socket, sf->sf_host, atoi(sf->sf_port));
-  amqp_login(conn, "/", 0, 131072, 0, AMQP_SASL_METHOD_PLAIN, "guest", "guest");
+  status = amqp_socket_open(socket, server_url, 5672);
+  amqp_login(conn, "xsede_stats", 0, 131072, 0, AMQP_SASL_METHOD_PLAIN, "xsede_stats", passwd);
+  free(server_url);
+  free(passwd);
   amqp_channel_open(conn, 1);
   amqp_get_rpc_reply(conn);
 
+  struct utsname uts_buf;
+  uname(&uts_buf);
+
   {
     amqp_basic_properties_t props;
-    props._flags = AMQP_BASIC_CONTENT_TYPE_FLAG | AMQP_BASIC_DELIVERY_MODE_FLAG;
+    props._flags = AMQP_BASIC_CONTENT_TYPE_FLAG | AMQP_BASIC_DELIVERY_MODE_FLAG | AMQP_BASIC_REPLY_TO_FLAG | AMQP_BASIC_TYPE_FLAG;
     props.content_type = amqp_cstring_bytes("text/plain");
     props.delivery_mode = 2; /* persistent delivery mode */
+    props.reply_to = amqp_cstring_bytes(uts_buf.nodename);
+    props.type = amqp_cstring_bytes("stat");
     amqp_basic_publish(conn,
 		       1,
 		       amqp_cstring_bytes(exchange),

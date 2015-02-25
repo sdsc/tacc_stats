@@ -1,0 +1,86 @@
+{% extends "gordon/index.html" %}
+
+{% block content %}
+<div class="container">
+{% if error %}
+   <p style="color: red;">Requested search failed.</p>
+{% endif %}
+
+<form action="{% url 'gordon:search' %}" method="get">
+<div class="row">
+  <div class="col-lg-3">
+    <input type="text" class="form-control" name ="jobid" placeholder="Job ID">
+  </div>
+  <div class="col-lg-3">
+    <button type="submit" class="btn btn-default">Search</button>
+  </div>
+</div>
+</form>
+<hr/>
+
+<form action="{% url 'gordon:search' %}" method="get">
+
+<h4>Search Using Combined Fields:</h4>
+<div class="row">
+  <div class="col-md-2"><label>Start Date</label></div>
+  <div class="col-md-2"><input type="date" class="form-control input-sm" name="date__gte"></div>
+  <div class="col-md-1"></div>
+  <div class="col-md-1"><label>End Date</label></div>
+  <div class="col-md-2"><input type="date" class="form-control input-sm" name="date__lte"></div>
+</div>
+<div class="row">
+    <div class="col-md-2"><label for="uid">UID</label></div>
+    <div class="col-md-2"><input type="text"  class="form-control input-sm" name="uid"></div>
+</div>
+<div class="row">
+    <div class="col-md-2"><label for="uid">User Name</label></div>
+    <div class="col-md-2"><input type="text" class="form-control input-sm" name="user"></div>
+</div>
+<div class="row">
+    <div class="col-md-2"><label for="uid">Project</label></div>
+    <div class="col-md-2"><input type="text" class="form-control input-sm" name="project"></div>
+</div>
+<div class="row">
+    <div class="col-md-2"><label for="uid">Executable</label></div>
+    <div class="col-md-2"><input type="text" class="form-control input-sm" name="exe__icontains"></div>
+</div>
+<br/>
+<div class="row">
+    <div class="col-md-2"><label for="uid">Search field</label></div>
+    <div class="col-md-2">
+        <input type="text" class="form-control input-sm" name="opt_field1">
+        <input type="text" class="form-control input-sm" name="opt_field2">
+        <input type="text" class="form-control input-sm" name="opt_field3">
+    </div>
+    <div class="col-md-1"></div>
+    <div class="col-md-1"><label for="uid">Value</label></div>
+    <div class="col-md-2">
+        <input type="text" class="form-control input-sm" name="value1">
+        <input type="text" class="form-control input-sm" name="value2">
+        <input type="text" class="form-control input-sm" name="value3">
+    </div>
+</div>
+<br/>
+<button type="submit" class="btn btn-default">Search</button>
+</form>
+
+</div>
+
+  <div class="container">
+     {% if date_list %}
+        <nav>
+        {% for month, dates in date_list %}
+                <ul class="pagination">
+                <li><a>{{month}}</a></li>
+                {% for date in dates %}
+                    <li><a href="date/{{date.0}}">{{date.1}}</a></li>
+                {% endfor %}
+            </tr>
+        {% endfor %}
+        </nav>
+    {% else %}
+        <p> No job data available </p>
+    {% endif %}   
+  </div>
+
+{% endblock content %}
