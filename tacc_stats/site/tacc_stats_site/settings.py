@@ -18,14 +18,7 @@ DATABASES = {
         'USER' : 'root',
         'PASSWORD' : '',
         'HOST' : 'localhost'
-        },        
-    'xalt' : {
-        'ENGINE' : 'django.db.backends.mysql',
-        'NAME' : 'xalt',
-        'USER' : 'root',
-        'PASSWORD' : '',
-        'HOST' : 'localhost'
-        }        
+        }
     }
 
 # Hosts/domain names that are valid for this site; required if DEBUG is False
@@ -137,10 +130,7 @@ INSTALLED_APPS = (
     #'django_pdf',
     # Uncomment the next line to enable admin documentation:
     # 'django.contrib.admindocs',
-    'tacc_stats.site.stampede',
-    'tacc_stats.site.lonestar',
-    'tacc_stats.site.comet',
-    'tacc_stats.site.gordon'
+    'tacc_stats.site.machine',
 )
 """
 TEMPLATE_CONTEXT_PROCESSORS=(
