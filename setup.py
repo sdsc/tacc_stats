@@ -56,7 +56,7 @@ CLASSIFIERS = [
 MAJOR = 2
 MINOR = 1
 MICRO = 0
-ISRELEASED = True
+ISRELEASED = False
 VERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
 QUALIFIER = ''
 FULLVERSION = VERSION
@@ -95,7 +95,7 @@ if not ISRELEASED:
           # partial clone, manually construct version string
           # this is the format before we started using git-describe
           # to get an ordering on dev version strings.
-          rev ="v%s.dev-%s" % (VERSION, rev)
+          rev ="v%s-%s" % (VERSION, rev)
 
       # Strip leading v from tags format "vx.y.z" to get th version string
       FULLVERSION = rev.lstrip('v')
