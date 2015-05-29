@@ -62,14 +62,7 @@ def update_comp_info(thresholds = None):
         obj.save()
 
 def update(date,rerun=False):
-<<<<<<< HEAD:tacc_stats/site/stampede/views.py
-    ld = lariat_utils.LariatData(directory = cfg.lariat_path,
-                                 daysback = 2)
     tz = pytz.timezone('US/Pacific')
-=======
-
-    tz = pytz.timezone('US/Central')
->>>>>>> 916357b75e0c36f546cc81eeffce64bb3f7c6ed0:tacc_stats/site/machine/views.py
     pickle_dir = os.path.join(cfg.pickles_dir,date)
 
     ctr = 0
