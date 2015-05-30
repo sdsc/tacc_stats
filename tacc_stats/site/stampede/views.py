@@ -43,7 +43,10 @@ def update_comp_info(thresholds = None):
                   'Idle' : ['idle','>',0.99],
                   'LowFLOPS' : ['flops','<',10],
                   'VecPercent' : ['VecPercent','<',0.05],
-                  'GigEBW' : ['GigEBW','>',1e7]}
+                  'GigEBW' : ['GigEBW','>',1e7],
+                  'CPU_Usage' : ['CPU_Usage','<',800],
+                  'Load_All' : ['Load_All','<',1e7],
+                  }
     if thresholds:
         for key,val in thresholds.iteritems():
             schema_map[key][1:3] = val
@@ -73,7 +76,8 @@ def update(date,rerun=False):
 
             try:
                 if rerun: pass
-                elif Job.objects.filter(id = pickle_file).exists(): continue
+                elif Job.objects.filter(id = pickle_file).exists(): 
+                    continue                
             except:
                 print pickle_file,"doesn't look like a pickled job"
                 continue
@@ -84,10 +88,12 @@ def update(date,rerun=False):
                     data = np.load(f)
                     json = data.acct
                     hosts = data.hosts.keys()
-                del json['yesno'], json['unknown']
+                del json['yesno']
                 utc_start = datetime.utcfromtimestamp(json['start_time']).replace(tzinfo=pytz.utc)
                 utc_end = datetime.utcfromtimestamp(json['end_time']).replace(tzinfo=pytz.utc)
                 json['run_time'] = json['end_time'] - json['start_time']
+                json['requested_time'] = json['unknown']*60
+                del json['unknown']
                 json['start_epoch'] = json['start_time']
                 json['end_epoch'] = json['end_time']
                 json['start_time'] = utc_start.astimezone(tz)
@@ -97,7 +103,7 @@ def update(date,rerun=False):
 
                 try: json['user']=pwd.getpwuid(int(json['uid']))[0]
                 except: json['user']='unknown'
-
+                json['wayness'] = json['cores']/json['nodes']
                 ### If xalt or lariat data is available 
                 ### add info to the tacc_stats_site_db 
                 # Assign additional xalt data if available
@@ -106,7 +112,7 @@ def update(date,rerun=False):
                     xd              = xd[0]
                     json['user']    = xd.user
                     json['exe']     = xd.exec_path.split('/')[-1][0:128]
-                    json['exec_path']     = xd.exec_path
+                    json['exec_path'] = xd.exec_path
                     json['cwd']     = xd.cwd[0:128]
                     json['threads'] = xd.num_threads
                     json['cores']   = xd.num_cores
@@ -154,7 +160,7 @@ def update(date,rerun=False):
 
 def update_metric_fields(date,rerun=False):
     update_comp_info()
-    aud = exam.Auditor(processes=2)
+    aud = exam.Auditor(processes=4)
     
     aud.stage(exam.GigEBW, ignore_qs=[], min_time = 600)
     aud.stage(exam.HighCPI, ignore_qs=[], min_time = 600)
@@ -167,9 +173,11 @@ def update_metric_fields(date,rerun=False):
     aud.stage(exam.MemUsage, ignore_qs=[], min_time = 600)
     aud.stage(exam.PacketRate, ignore_qs=[], min_time = 600)
     aud.stage(exam.PacketSize, ignore_qs=[], min_time = 600)
-    aud.stage(exam.Idle,min_hosts=2, ignore_qs=[], min_time = 600)
+    aud.stage(exam.Idle, ignore_qs=[], min_time = 600)
     aud.stage(exam.LowFLOPS, ignore_qs=[], min_time = 600)
     aud.stage(exam.VecPercent, ignore_qs=[], min_time = 600)
+    aud.stage(exam.CPU_Usage, ignore_qs = [], min_time = 600)
+    aud.stage(exam.Load_All, ignore_qs = [], min_time = 600)
 
     print 'Run the following tests for:',date
     for name, test in aud.measures.iteritems():
@@ -180,14 +188,15 @@ def update_metric_fields(date,rerun=False):
     jobs_list = Job.objects.filter(date = date).exclude(run_time__lt = 600)
 
     # Use mem to see if job was tested.  It will always exist
-    #if not rerun:
-    #    jobs_list = jobs_list.filter(Q(cpi = None) | Q(cpi = float('nan')))
+    if not rerun:
+        jobs_list = jobs_list.filter(Load_L1Hits = None)
     
     paths = []
     for job in jobs_list:
         paths.append(os.path.join(cfg.pickles_dir,
                                   job.date.strftime('%Y-%m-%d'),
                                   str(job.id)))
+        
     num_jobs = jobs_list.count()
     print '# Jobs to be tested:',num_jobs
     if num_jobs == 0 : return
@@ -240,29 +249,16 @@ def sys_plot(request, pk):
 
 def dates(request):
 
-    date_list = []
-    dates = Job.objects.values_list('date',flat=True).distinct()
-    for date in dates:
-        try:
-            date_list.append(date.strftime('%Y-%m-%d'))
-        except: 
-            pass
-
-    date_list = sorted(date_list, key=lambda d: map(int, d.split('-')))
-
     month_dict ={}
-
-    for date in date_list:
-        y,m,d = date.split('-')
+    dates = Job.objects.dates('date','day')
+    for date in dates:
+        y,m,d = date.strftime('%Y-%m-%d').split('-')
         key = y+' / '+m
-        if key not in month_dict: month_dict[key] = []
-        date_pair = (date, d)
-        month_dict[key].append(date_pair)
-
-    date_list = month_dict
+        month_dict.setdefault(key, [])
+        month_dict[key].append((y+'-'+m+'-'+d, d))
+        
     field = {}
-
-    field['date_list'] = sorted(date_list.iteritems())
+    field['date_list'] = sorted(month_dict.iteritems())
     return render_to_response("stampede/search.html", field)
 
 def search(request):
