@@ -46,7 +46,8 @@ static char * readFile(char* path) {
   length = ftell (f);
   fseek (f, 0, SEEK_SET);
   buffer = malloc (length);
-  fread (buffer, 1, length, f);
+  size_t read_bytes = fread (buffer, 1, length, f);
+  buffer[read_bytes] = '\0';
   fclose (f);
 
   char *pos;
