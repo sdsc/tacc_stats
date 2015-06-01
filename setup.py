@@ -56,7 +56,7 @@ CLASSIFIERS = [
 MAJOR = 2
 MINOR = 1
 MICRO = 0
-ISRELEASED = True
+ISRELEASED = False
 VERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
 QUALIFIER = ''
 FULLVERSION = VERSION
@@ -95,7 +95,7 @@ if not ISRELEASED:
           # partial clone, manually construct version string
           # this is the format before we started using git-describe
           # to get an ordering on dev version strings.
-          rev ="v%s.dev-%s" % (VERSION, rev)
+          rev ="v%s-%s" % (VERSION, rev)
 
       # Strip leading v from tags format "vx.y.z" to get th version string
       FULLVERSION = rev.lstrip('v')
@@ -396,13 +396,14 @@ fi
             post_install_cmds = """
 cp %{_bindir}/taccstats /etc/init.d/
 chkconfig --add taccstats
-service taccstats restart
+/sbin/service taccstats restart
 """
         open(self.post_install,"w").write(post_install_cmds)
         self.pre_install = None
         if MODE == "DAEMON":
             self.post_uninstall = "build/bdist_rpm_post_uninstall"
             post_uninstall_cmds = """
+/sbin/service taccstats stop
 chkconfig --del taccstats
 rm /etc/init.d/taccstats
 rmdir %{_bindir}
@@ -509,10 +510,9 @@ else:
     scripts=['build/bin/monitord',             
              'tacc_stats/analysis/job_sweeper.py',
              'tacc_stats/analysis/job_plotter.py',
-             'tacc_stats/site/lonestar/ls4_update_db.py',
-             'tacc_stats/site/stampede/update_db.py',
-             'tacc_stats/site/stampede/update_thresholds.py',
-             'tacc_stats/site/stampede/thresholds.cfg',
+             'tacc_stats/site/machine/update_db.py',
+             'tacc_stats/site/machine/update_thresholds.py',
+             'tacc_stats/site/machine/thresholds.cfg',
              'tacc_stats/pickler/job_pickles.py']
     if RMQ: scripts += ['build/bin/amqp_listend']
     if MODE == "CRON":
