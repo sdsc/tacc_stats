@@ -71,7 +71,6 @@ def update(date,rerun=False):
         print "Number of pickle files in",root,'=',num_files
         for pickle_file in sorted(pickle_files):
             ctr += 1
-            print pickle_file
             try:
                 if rerun: pass
                 elif Job.objects.filter(id = pickle_file).exists(): 
