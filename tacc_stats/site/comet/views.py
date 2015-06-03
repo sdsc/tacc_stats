@@ -185,9 +185,10 @@ def sys_plot(request, pk):
 
     racks = []
     nodes = []
+    clust_name = ""
     for host in Host.objects.values_list('name',flat=True).distinct():
-        name,r,n=host.split('-')
-        racks.append(r)
+        clust_name,r,n=host.split('-')
+        racks.append("{0:02d}".format(int(r)))
         nodes.append(n)
     racks = sorted(set(racks))
     nodes = sorted(set(nodes))
@@ -198,7 +199,7 @@ def sys_plot(request, pk):
     x = np.zeros((len(nodes),len(racks)))
     for r in range(len(racks)):
         for n in range(len(nodes)):
-            name = str(racks[r])+'-'+str(nodes[n])
+            name = clust_name+'-'+str(racks[r])+'-'+str(nodes[n])
             if name in hosts: x[n][r] = 1.0
 
     fig = Figure(figsize=(17,5))
