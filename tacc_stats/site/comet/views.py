@@ -5,8 +5,8 @@ from django.db.models import Q
 
 import os,sys,pwd
 from tacc_stats.analysis import exam
-from tacc_stats.site.comet.models import Job, Host, TestInfo
-from tacc_stats.site.xalt.models import run
+from tacc_stats.site.comet.models import Job, Host, Libraries, TestInfo
+from tacc_stats.site.xalt.models import run, join_run_object, lib
 import tacc_stats.cfg as cfg
 
 import tacc_stats.analysis.plot as plots
@@ -28,7 +28,8 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from django.core.cache import cache,get_cache 
 import traceback
 
-def update_comp_info():
+def update_comp_info(thresholds = None):
+    
     schema_map = {'HighCPI' : ['cpi','>',1.5], 
                   'HighCPLD' : ['cpld','>',1.5], 
                   'Load_L1Hits' : ['Load_L1Hits','>',1.5], 
@@ -42,7 +43,13 @@ def update_comp_info():
                   'Idle' : ['idle','>',0.99],
                   'LowFLOPS' : ['flops','<',10],
                   'VecPercent' : ['VecPercent','<',0.05],
-                  'GigEBW' : ['GigEBW','>',1e7]}
+                  'GigEBW' : ['GigEBW','>',1e7],
+                  'CPU_Usage' : ['CPU_Usage','<',800],
+                  'Load_All' : ['Load_All','<',1e7],
+                  }
+    if thresholds:
+        for key,val in thresholds.iteritems():
+            schema_map[key][1:3] = val
 
     for name in schema_map:
         if TestInfo.objects.filter(test_name = name).exists():
@@ -55,8 +62,6 @@ def update_comp_info():
         obj.save()
 
 def update(date,rerun=False):
-    ld = lariat_utils.LariatData(directory = cfg.lariat_path,
-                                 daysback = 2)
     tz = pytz.timezone('US/Pacific')
     pickle_dir = os.path.join(cfg.pickles_dir,date)
 
@@ -66,10 +71,11 @@ def update(date,rerun=False):
         print "Number of pickle files in",root,'=',num_files
         for pickle_file in sorted(pickle_files):
             ctr += 1
-
+            print pickle_file
             try:
                 if rerun: pass
-                elif Job.objects.filter(id = pickle_file).exists(): continue
+                elif Job.objects.filter(id = pickle_file).exists(): 
+                    continue                
             except:
                 print pickle_file,"doesn't look like a pickled job"
                 continue
@@ -80,52 +86,56 @@ def update(date,rerun=False):
                     data = np.load(f)
                     json = data.acct
                     hosts = data.hosts.keys()
-                del json['yesno'], json['unknown']
-                utc_start = datetime.utcfromtimestamp(json['start_time']).replace(tzinfo=pytz.utc)
-                utc_end = datetime.utcfromtimestamp(json['end_time']).replace(tzinfo=pytz.utc)
+                del json['yesno']
+                utc_start = datetime.utcfromtimestamp(
+                    json['start_time']).replace(tzinfo=pytz.utc)
+                utc_end = datetime.utcfromtimestamp(
+                    json['end_time']).replace(tzinfo=pytz.utc)
                 json['run_time'] = json['end_time'] - json['start_time']
+
+                if json.has_key('unknown'):
+                    json['requested_time'] = json['unknown']*60
+                    del json['unknown']
+                else: json['requested_time'] = json['requested_time']*60
+
                 json['start_epoch'] = json['start_time']
                 json['end_epoch'] = json['end_time']
                 json['start_time'] = utc_start.astimezone(tz)
                 json['end_time'] =  utc_end.astimezone(tz)
                 json['date'] = json['end_time'].date()
                 json['name'] = json['name'][0:128]
+                json['wayness'] = json['cores']/json['nodes']
 
                 try: json['user']=pwd.getpwuid(int(json['uid']))[0]
                 except: json['user']='unknown'
-
-                ### If xalt or lariat data is available 
-                ### add info to the tacc_stats_site_db 
-                # Assign additional xalt data if available
-                xd = run.objects.using('xalt').filter(job_id = json['id'])
-                if xd:
-                    xd              = xd[0]
-                    json['user']    = xd.user
+                
+                ### If xalt is available add data to the DB 
+                try:
+                    xd = run.objects.using('xalt').filter(job_id = json['id'])[0]
+                    jsn['user']    = xd.user
                     json['exe']     = xd.exec_path.split('/')[-1][0:128]
+                    json['exec_path'] = xd.exec_path
                     json['cwd']     = xd.cwd[0:128]
                     json['threads'] = xd.num_threads
-                    json['cores']   = xd.num_cores
-                    json['nodes']   = xd.num_nodes
-                    json['wayness'] = xd.num_cores/xd.num_nodes
-
-                """
-                else: # Otherwise use Lariat Data if available
-                    ld.set_job(pickle_file, end_time = date)
-                    print 'Using lariat',ld.id
-                    json['user']    = ld.user
-                    json['exe']     = ld.exc.split('/')[-1]
-                    json['cwd']     = ld.cwd[0:128]
-                    json['threads'] = ld.threads
-                    if ld.cores: json['cores'] = ld.cores
-                    if ld.nodes: json['nodes'] = ld.nodes
-                    if ld.wayness: json['wayness'] = ld.wayness
-                """
+                except: xd = False 
+                    
                 obj, created = Job.objects.update_or_create(**json)
-
                 for host_name in hosts:
                     h = Host(name=host_name)
                     h.save()
                     h.jobs.add(obj)
+
+                if xd:
+                    for join in join_run_object.objects.using('xalt').filter(run_id = xd.run_id):
+                        try:
+                            object_path = lib.objects.using('xalt').get(obj_id = join.obj_id).object_path
+                            module_name = lib.objects.using('xalt').get(obj_id = join.obj_id).module_name
+                            if not module_name: module_name = 'none'
+                            library = Libraries(object_path = object_path, module_name = module_name)
+                            library.save()
+                            library.jobs.add(obj)
+                        except: pass
+
             except: 
                 print json
                 print pickle_file,'failed'
@@ -135,22 +145,24 @@ def update(date,rerun=False):
 
 def update_metric_fields(date,rerun=False):
     update_comp_info()
-    aud = exam.Auditor(processes=2)
+    aud = exam.Auditor(processes=4)
     
-    aud.stage(exam.GigEBW, ignore_qs=[], min_time = 600)
-    aud.stage(exam.HighCPI, ignore_qs=[], min_time = 600)
-    aud.stage(exam.HighCPLD, ignore_qs=[], min_time = 600)
-    aud.stage(exam.Load_L1Hits, ignore_qs=[], min_time = 600)
-    aud.stage(exam.Load_L2Hits, ignore_qs=[], min_time = 600)
-    aud.stage(exam.Load_LLCHits, ignore_qs=[], min_time = 600)
-    aud.stage(exam.MemBw, ignore_qs=[], min_time = 600)
-    aud.stage(exam.Catastrophe, ignore_qs=[], min_time = 3600)
-    aud.stage(exam.MemUsage, ignore_qs=[], min_time = 600)
-    aud.stage(exam.PacketRate, ignore_qs=[], min_time = 600)
-    aud.stage(exam.PacketSize, ignore_qs=[], min_time = 600)
-    aud.stage(exam.Idle,min_hosts=2, ignore_qs=[], min_time = 600)
-    aud.stage(exam.LowFLOPS, ignore_qs=[], min_time = 600)
-    aud.stage(exam.VecPercent, ignore_qs=[], min_time = 600)
+    aud.stage(exam.GigEBW, ignore_qs=[], min_time = 0)
+    aud.stage(exam.HighCPI, ignore_qs=[], min_time = 0)
+    aud.stage(exam.HighCPLD, ignore_qs=[], min_time = 0)
+    aud.stage(exam.Load_L1Hits, ignore_qs=[], min_time = 0)
+    aud.stage(exam.Load_L2Hits, ignore_qs=[], min_time = 0)
+    aud.stage(exam.Load_LLCHits, ignore_qs=[], min_time = 0)
+    aud.stage(exam.MemBw, ignore_qs=[], min_time = 0)
+    aud.stage(exam.Catastrophe, ignore_qs=[], min_time = 0)
+    aud.stage(exam.MemUsage, ignore_qs=[], min_time = 0)
+    aud.stage(exam.PacketRate, ignore_qs=[], min_time = 0)
+    aud.stage(exam.PacketSize, ignore_qs=[], min_time = 0)
+    aud.stage(exam.Idle, ignore_qs=[], min_time = 0)
+    aud.stage(exam.LowFLOPS, ignore_qs=[], min_time = 0)
+    aud.stage(exam.VecPercent, ignore_qs=[], min_time = 0)
+    aud.stage(exam.CPU_Usage, ignore_qs = [], min_time = 0)
+    aud.stage(exam.Load_All, ignore_qs = [], min_time = 0)
 
     print 'Run the following tests for:',date
     for name, test in aud.measures.iteritems():
@@ -158,17 +170,18 @@ def update_metric_fields(date,rerun=False):
         obj = TestInfo.objects.get(test_name = name)
         print obj.field_name,obj.threshold,obj.comparator
 
-    jobs_list = Job.objects.filter(date = date).exclude(run_time__lt = 600)
+    jobs_list = Job.objects.filter(date = date).exclude(run_time__lt = 0)
 
     # Use mem to see if job was tested.  It will always exist
-    #if not rerun:
-    #    jobs_list = jobs_list.filter(Q(cpi = None) | Q(cpi = float('nan')))
+    if not rerun:
+        jobs_list = jobs_list.filter(Load_L1Hits = None)
     
     paths = []
     for job in jobs_list:
         paths.append(os.path.join(cfg.pickles_dir,
                                   job.date.strftime('%Y-%m-%d'),
                                   str(job.id)))
+        
     num_jobs = jobs_list.count()
     print '# Jobs to be tested:',num_jobs
     if num_jobs == 0 : return
@@ -179,7 +192,10 @@ def update_metric_fields(date,rerun=False):
     for name, results in aud.metrics.iteritems():
         obj = TestInfo.objects.get(test_name = name)
         for jobid in results.keys():
-            jobs_list.filter(id = jobid).update(**{ obj.field_name : results[jobid]})
+            try:
+                jobs_list.filter(id = jobid).update(**{ obj.field_name : results[jobid]})
+            except:
+                pass
 
 def sys_plot(request, pk):
 
@@ -222,29 +238,16 @@ def sys_plot(request, pk):
 
 def dates(request):
 
-    date_list = []
-    dates = Job.objects.values_list('date',flat=True).distinct()
-    for date in dates:
-        try:
-            date_list.append(date.strftime('%Y-%m-%d'))
-        except: 
-            pass
-
-    date_list = sorted(date_list, key=lambda d: map(int, d.split('-')))
-
     month_dict ={}
-
-    for date in date_list:
-        y,m,d = date.split('-')
+    dates = Job.objects.dates('date','day')
+    for date in dates:
+        y,m,d = date.strftime('%Y-%m-%d').split('-')
         key = y+' / '+m
-        if key not in month_dict: month_dict[key] = []
-        date_pair = (date, d)
-        month_dict[key].append(date_pair)
-
-    date_list = month_dict
+        month_dict.setdefault(key, [])
+        month_dict[key].append((y+'-'+m+'-'+d, d))
+        
     field = {}
-
-    field['date_list'] = sorted(date_list.iteritems())
+    field['date_list'] = sorted(month_dict.iteritems())
     return render_to_response("comet/search.html", field)
 
 def search(request):
@@ -425,9 +428,14 @@ def master_plot(request, pk):
 
 def heat_map(request, pk):    
     data = get_data(pk)
-    hm = plots.HeatMap(k1=['intel_nhm','intel_nhm'],
-                       k2=['CLOCKS_UNHALTED_REF',
-                           'INSTRUCTIONS_RETIRED'],
+    hm = plots.HeatMap(k1={'intel_snb' : ['intel_snb','intel_snb'],
+                           'intel_hsw' : ['intel_hsw','intel_hsw']
+                           },
+                       k2={'intel_snb' : ['CLOCKS_UNHALTED_REF', 
+                                          'INSTRUCTIONS_RETIRED'],
+                           'intel_hsw' : ['CLOCKS_UNHALTED_REF', 
+                                          'INSTRUCTIONS_RETIRED']
+                           },
                        lariat_data="pass")
     hm.plot(pk,job_data=data)
     return figure_to_response(hm)
@@ -507,8 +515,10 @@ def type_plot(request, pk, type_name):
     schema = build_schema(data,type_name)
     schema = [x.split(',')[0] for x in schema]
 
-    k1 = {'intel_nhm' : [type_name]*len(schema)}
-    k2 = {'intel_nhm': schema}
+    k1 = {'intel_snb' : [type_name]*len(schema),
+          'intel_hsw' : [type_name]*len(schema)}
+    k2 = {'intel_snb': schema,
+          'intel_hsw': schema}
 
     tp = plots.DevPlot(k1=k1,k2=k2,lariat_data='pass')
     tp.plot(pk,job_data=data)
