@@ -3,112 +3,118 @@
 {% block content %}
 {% if job %}
 <div class="container-fluid">
-   <h2> Job Summary    </h2>
- <table class="table table-condensed table-bordered">
-    <thead>
-        <tr>
-	  <th> Job ID </th>
-	  <th> UID </th>
-	  <th> user </th>
-	  <th> project </th>
-	  <th> executable </th>
-	  <th> start time </th>
-	  <th> end time </th>
-	  <th> run time (s)</th>
-	  <th> queue </th>
-	  <th> name </th>
-	  <th> status </th>
-	  <th> wayness </th>
-	  <th> cores </th>
-	  <th> nodes </th>
-	  <th> threads / task </th>
+	<h2> Job Summary    </h2>
+	<table class="table table-condensed table-bordered">
+		<thead>
+			<tr>
+				<th> Job ID </th>
+				<th> UID </th>
+				<th> user </th>
+				<th> project </th>
+				<th> executable </th>
+				<th> start time </th>
+				<th> end time </th>
+				<th> run time (s)</th>
+				<th> queue </th>
+				<th> name </th>
+				<th> status </th>
+				<th> wayness </th>
+				<th> cores </th>
+				<th> nodes </th>
+				<th> threads / task </th>
 
-	</tr>
-    </thead>
-    <tbody>
-        <tr bgcolor="{{job.color}}">
-	  <td><a href="{% url 'comet:job'  job.id %}"/>{{ job.id }}</a>
-	  <td><a href="{% url 'comet:uid_view' job.uid %}"/>{{ job.uid }}</td>
-      <td><a href="{% url 'comet:uid_view' job.uid %}"/>{{ job.user }}</td>
-          <td><a href="{% url 'comet:project_view' job.project %}"/>{{ job.project }}</td>
-          <td><a href="{% url 'comet:exe_view' job.exe %}"/>{{ job.exe }}</td>
-          <td align=right>{{ job.start_time }}</td>
-          <td align=right>{{ job.end_time }}</td>
-          <td align=right>{{ job.run_time }}</td>
-          <td align=right>{{ job.queue }}</td>
-          <td align=right>{{ job.name }}</td>
-          <td align=right>{{ job.status }}</td>
-          <td align=right>{{ job.wayness }}</td>
-          <td align=right>{{ job.cores }}</td>
-          <td align=right>{{ job.nodes }}</td>
-          <td align=right>{{ job.threads }}</td>
-        </tr>
-	<tr><th> Test </th> <th> Measured </th> <th> Threshold </th> <th> Result </th>
-        <tr>
-	  {% for key,value in testinfo_dict.items %}
-	  <tr> <th> {{ key }} </th> 
-	   <th> {{ value.0|stringformat:"0.2e" }} </th>
-	   <th> {{ value.1|stringformat:"0.2e" }} </th>
-	   <th> {{ value.2 }} </th> </tr>
-	  {% endfor %}
-	  <th> CPI  </th>
-	  <th> MBW </th>
-	  <th> Idle </th>
-	  <th> Catastrophe </th>
-	  <th> Mem HWM (GB) </th>
-	  <th> Max IB Packet Rate (B) </th>
-	  <th> Ave IB Packet Size (B) </th>
-	  <th> GigE BW (B)</th>
-	  <th> Ave GFLOPS </th>
-	  <th> Vec Percent </th>
-	</tr>
-	<tr>
-	  {% for test in test_list %}
-	  <td align=right>{{ job.test.test_name }}</td>
-	  {% endfor %}
-          <td align=right>{{ job.cpi|stringformat:".2f" }}</td>
-          <td align=right>{{ job.mbw|stringformat:".2f" }}</td>
-          <td align=right>{{ job.idle|stringformat:".2f" }}</td>
-          <td align=right>{{ job.cat|stringformat:".2f" }}</td>
-          <td align=right>{{ job.mem|stringformat:".2e" }}</td>
-          <td align=right>{{ job.packetrate|stringformat:".2e" }}</td>
-          <td align=right>{{ job.packetsize|stringformat:".2e" }}</td>
-          <td align=right>{{ job.GigEBW|stringformat:".2e" }}</td>
-          <td align=right>{{ job.flops|stringformat:".2f" }}</td>
-          <td align=right>{{ job.VecPercent|stringformat:".2f" }}</td>
-	</tr>
-    </tbody>
-   </table>
-   <p><font size="5">Working Directory: {{job.cwd}}</font></p><p> <a href={{ client_url }}> Client Logs</a>   <a href={{ server_url }}> Server Logs</a></p>
-   <hr>
-<p><center>     <font size="6"> Snapshot Plots </font></p>
-    <table>
-      <tr>
-	<td>
-	  <div id="dv01"> 
-	    <img src="{% url 'comet:master_plot' job.id %}" style="max-width:100%;" alt="job less than time resolution"/> 
-	  </div>
-	</td>
-	<td>
-	  <div id="dv02">
-              <img src="{% url 'comet:heat_map' job.id %}"  style="max-width:100%;" alt="heat map failed"/> 
-           </div>
-        </td>
-     </table>
-</center>
-<p>
-<img src="{% url 'comet:sys_plot' job.id %}" alt="sys plot failed"  style="max-width:100%;" align="left"/> 
-</p>
-<hr>
-<center><h2> Schema Summary: Choose Type Name below to access plots and counts of Performance Events. </h2></center>
-    <table border="1" cellpadding="5"  style=font-family:"arial">
-      <tr><th>Type Name</th><th>Recorded Performance Events</th></tr>
-         {% for type_name, schema in type_list %}
-            <tr><td><a href="{{ type_name }}/">{{ type_name }}</a></td><td>{{ schema }}</td></tr>
-         {% endfor %}
-    </table>
-</div>
-{% else %}
-    <h1>Job not found</h1>
-{% endif %}
-{% endblock content %}
+			</tr>
+		</thead>
+		<tbody>
+			<tr bgcolor="{{job.color}}">
+				<td><a href="{% url 'comet:job'  job.id %}"/>{{ job.id }}</a>
+					<td><a href="{% url 'comet:uid_view' job.uid %}"/>{{ job.uid }}</td>
+					<td><a href="{% url 'comet:uid_view' job.uid %}"/>{{ job.user }}</td>
+					<td><a href="{% url 'comet:project_view' job.project %}"/>{{ job.project }}</td>
+					<td><a href="{% url 'comet:exe_view' job.exe %}"/>{{ job.exe }}</td>
+					<td align=right>{{ job.start_time }}</td>
+					<td align=right>{{ job.end_time }}</td>
+					<td align=right>{{ job.run_time }}</td>
+					<td align=right>{{ job.queue }}</td>
+					<td align=right>{{ job.name }}</td>
+					<td align=right>{{ job.status }}</td>
+					<td align=right>{{ job.wayness }}</td>
+					<td align=right>{{ job.cores }}</td>
+					<td align=right>{{ job.nodes }}</td>
+					<td align=right>{{ job.threads }}</td>
+				</tr>
+				<tr><th> Test </th> <th> Measured </th> <th> Threshold </th> <th> Result </th>
+					<tr>
+						{% for key,value in testinfo_dict.items %}
+						<tr> <th> {{ key }} </th> 
+							<th> {{ value.0|stringformat:"0.2e" }} </th>
+							<th> {{ value.1|stringformat:"0.2e" }} </th>
+							<th> {{ value.2 }} </th> </tr>
+							{% endfor %}
+							<th> CPI  </th>
+							<th> MBW </th>
+							<th> Idle </th>
+							<th> Catastrophe </th>
+							<th> Mem HWM (GB) </th>
+							<th> Max IB Packet Rate (B) </th>
+							<th> Ave IB Packet Size (B) </th>
+							<th> GigE BW (B)</th>
+							<th> Ave GFLOPS </th>
+							<th> Vec Percent </th>
+						</tr>
+						<tr>
+							{% for test in test_list %}
+							<td align=right>{{ job.test.test_name }}</td>
+							{% endfor %}
+							<td align=right>{{ job.cpi|stringformat:".2f" }}</td>
+							<td align=right>{{ job.mbw|stringformat:".2f" }}</td>
+							<td align=right>{{ job.idle|stringformat:".2f" }}</td>
+							<td align=right>{{ job.cat|stringformat:".2f" }}</td>
+							<td align=right>{{ job.mem|stringformat:".2e" }}</td>
+							<td align=right>{{ job.packetrate|stringformat:".2e" }}</td>
+							<td align=right>{{ job.packetsize|stringformat:".2e" }}</td>
+							<td align=right>{{ job.GigEBW|stringformat:".2e" }}</td>
+							<td align=right>{{ job.flops|stringformat:".2f" }}</td>
+							<td align=right>{{ job.VecPercent|stringformat:".2f" }}</td>
+						</tr>
+					</tbody>
+				</table>
+				<p><font size="5">Working Directory: {{job.cwd}}</font></p>
+				<p> 
+					<a href={{ client_url }}> Client Logs</a>
+					<a href={{ server_url }}> Server Logs</a>
+				</p>
+				<hr>
+				<p><font size="6"> Snapshot Plots </font></p>
+				<table>
+					<tr>
+						<td>
+							<div id="dv01"> 
+								<img src="{% url 'comet:master_plot' job.id %}" style="max-width:100%;" alt="job less than time resolution"/> 
+							</div>
+						</td>
+						<td>
+							<div id="dv02">
+								<img src="{% url 'comet:heat_map' job.id %}"  style="max-width:100%;" alt="heat map failed"/> 
+							</div>
+						</td>
+					</tr>
+				</table>
+				<p>
+					<img src="{% url 'comet:sys_plot' job.id %}" alt="sys plot failed"  style="max-width:100%;" align="left"/> 
+				</p>
+				<hr/>
+				<center>
+					<h2> Schema Summary: Choose Type Name below to access plots and counts of Performance Events. </h2>
+				</center>
+				<table border="1" cellpadding="5"  style=font-family:"arial">
+					<tr><th>Type Name</th><th>Recorded Performance Events</th></tr>
+					{% for type_name, schema in type_list %}
+					<tr><td><a href="{{ type_name }}/">{{ type_name }}</a></td><td>{{ schema }}</td></tr>
+					{% endfor %}
+				</table>
+			</div>
+			{% else %}
+			<h1>Job not found</h1>
+			{% endif %}
+			{% endblock content %}
