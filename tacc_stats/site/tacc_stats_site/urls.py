@@ -8,6 +8,7 @@ urlpatterns = patterns('',
     url(r'^$', 'tacc_stats_site.views.home', name='home'),
     url(r'^media/(?P<path>.*)$', 'django.views.static.serve',
         {'document_root': settings.MEDIA_ROOT}),                       
-    url(r'^machine/', include('machine.urls', namespace="machine"),name='machine'),
+    #url(r'^machine/', include('machine.urls', namespace="machine"),name='machine'),
+    url(r'^comet/', include('comet.urls', namespace="comet"),name='comet'),
     url(r'^admin/', include(admin.site.urls)),
 )

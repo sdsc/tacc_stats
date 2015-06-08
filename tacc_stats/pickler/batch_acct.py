@@ -168,7 +168,7 @@ class SLURMAcct(BatchAcct):
     """Return the path of the host list written during the prolog."""
     start_date = datetime.date.fromtimestamp(acct['start_time'])
     base_glob = 'hostlist.' + acct['id']
-    for days in (0, -1, 1, -2, 2, -3, 3):
+    for days in (0, -1, 1, -2, 2, -3, 3, -4, 4, -5, 5, -6, 6, -7, 7, -8, 8):
       yyyy_mm_dd = (start_date + datetime.timedelta(days)).strftime("%Y/%m/%d")
       full_glob = os.path.join(host_list_dir, yyyy_mm_dd, base_glob)
 

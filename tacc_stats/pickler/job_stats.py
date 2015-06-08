@@ -494,7 +494,7 @@ class Job(object):
             return False
 
         # Try this out
-        if self.acct['nodes'] != len(host_list): return False
+        if int(self.acct['nodes']) != len(host_list): return False
 
         for host_name in host_list:
             # TODO Keep bad_hosts.
