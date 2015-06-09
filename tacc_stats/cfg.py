@@ -1,0 +1,12 @@
+host_list_dir = "/opt/xsede_stats/hostfile_logs"
+stats_lock = "/var/lock/xsede_stats"
+host_name_ext = "sdsc.edu"
+lariat_path = "/opt/xsede_stats/lariatData/"
+batch_system = "SLURM"
+tacc_stats_home = "/opt/xsede_stats/"
+pickles_dir = "/opt/xsede_stats/comet_pickles/"
+stats_dir = "/var/log/xsede_stats"
+exe_path = "/opt/tacc_stats"
+jobid_file = "/var/run/XSEDE_stats_jobid"
+acct_path = "/opt/xsede_stats/comet_accounting/xsede_jobs_completed"
+seek = 0
