@@ -30,7 +30,7 @@ int consume(const char *hostname, const char* port, const char* archive_dir)
   amqp_bytes_t queuename;
 
   exchange = "amq.direct";
-  bindingkey = "tacc_stats";
+  bindingkey = HOST_NAME_EXT;
 
   conn = amqp_new_connection();
   socket = amqp_tcp_socket_new(conn);
@@ -48,7 +48,7 @@ int consume(const char *hostname, const char* port, const char* archive_dir)
   {
     amqp_queue_declare_ok_t *r = 
       amqp_queue_declare(conn, 1, 
-			 amqp_cstring_bytes("tacc_stats"), 
+			 amqp_cstring_bytes(bindingkey), 
 			 0, 1, 0, 0,
 			 amqp_empty_table);
 
@@ -90,7 +90,7 @@ int consume(const char *hostname, const char* port, const char* archive_dir)
 
       char *data_buf;
       asprintf(&data_buf, "%s", (char *) envelope.message.body.bytes);
-
+      char *tmp_buf = data_buf;
       char *line, *hostname;
       line = wsep(&data_buf);
 
@@ -110,9 +110,10 @@ int consume(const char *hostname, const char* port, const char* archive_dir)
 	line = wsep(&data_buf);
 	hostname = wsep(&data_buf);
       }	
- 
+
       // Make directory for host hostname if it doesn't exist
-      const char *stats_dir_path = strf("%s/%s",archive_dir,hostname);
+      char *stats_dir_path = strf("%s/%s",archive_dir,hostname);
+      free(tmp_buf);
       if (mkdir(stats_dir_path, 0777) < 0) {
 	if (errno != EEXIST)
 	  syslog(LOG_ERR, "cannot create directory `%s': %m\n", stats_dir_path);
@@ -126,6 +127,7 @@ int consume(const char *hostname, const char* port, const char* archive_dir)
 	  rc = 1;
 	}
 	syslog(LOG_INFO, "Rotating stats file for %s.\n", hostname);
+
 	fd = fopen(current_path, "w");
 	struct timeval tp;
 	double current_time;
@@ -149,9 +151,11 @@ int consume(const char *hostname, const char* port, const char* archive_dir)
 	      (char *) envelope.message.body.bytes);
       fflush(fd);
       fclose(fd);
-      free(current_path);
 
+      free(stats_dir_path);
+      free(current_path);
       amqp_destroy_envelope(&envelope);
+      //exit(1); /////////////////////////////
     }
   }
   

@@ -45,15 +45,16 @@ class Job(models.Model):
     Load_L2Hits = models.BigIntegerField(null=True)
     Load_LLCHits = models.BigIntegerField(null=True)
     CPU_Usage = models.FloatField(null=True)
+    MIC_Usage = models.FloatField(null=True)
 
     def __unicode__(self):
         return str(self.id)
 
     def color(self):
         if self.status == 'COMPLETED': 
-            ret_val = "lightblue"
+            ret_val = "E1EDFA"
         elif self.status == 'FAILED':
-            ret_val = "red"
+            ret_val = "FFB2B2"
         else:
             ret_val = "silver"
         return ret_val

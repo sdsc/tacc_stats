@@ -45,6 +45,7 @@ def update_comp_info(thresholds = None):
                   'VecPercent' : ['VecPercent','<',0.05],
                   'GigEBW' : ['GigEBW','>',1e7],
                   'CPU_Usage' : ['CPU_Usage','<',800],
+                  'MIC_Usage' : ['MIC_Usage','>',0.0],
                   'Load_All' : ['Load_All','<',1e7],
                   }
     if thresholds:
@@ -110,9 +111,10 @@ def update(date,rerun=False):
                 except: json['user']='unknown'
                 
                 ### If xalt is available add data to the DB 
+                xd = None
                 try:
                     xd = run.objects.using('xalt').filter(job_id = json['id'])[0]
-                    jsn['user']    = xd.user
+                    json['user']    = xd.user
                     json['exe']     = xd.exec_path.split('/')[-1][0:128]
                     json['exec_path'] = xd.exec_path
                     json['cwd']     = xd.cwd[0:128]
@@ -137,11 +139,10 @@ def update(date,rerun=False):
                         except: pass
 
             except: 
-                print json
                 print pickle_file,'failed'
                 print traceback.format_exc()
                 print date
-            #print "Percentage Completed =",100*float(ctr)/num_files
+            print "Percentage Completed =",100*float(ctr)/num_files
 
 def update_metric_fields(date,rerun=False):
     update_comp_info()
@@ -162,6 +163,7 @@ def update_metric_fields(date,rerun=False):
     aud.stage(exam.LowFLOPS, ignore_qs=[], min_time = 0)
     aud.stage(exam.VecPercent, ignore_qs=[], min_time = 0)
     aud.stage(exam.CPU_Usage, ignore_qs = [], min_time = 0)
+    aud.stage(exam.MIC_Usage, ignore_qs = [], min_time = 0)
     aud.stage(exam.Load_All, ignore_qs = [], min_time = 0)
 
     print 'Run the following tests for:',date
@@ -173,8 +175,8 @@ def update_metric_fields(date,rerun=False):
     jobs_list = Job.objects.filter(date = date).exclude(run_time__lt = 0)
 
     # Use mem to see if job was tested.  It will always exist
-    if not rerun:
-        jobs_list = jobs_list.filter(Load_L1Hits = None)
+    #if not rerun:
+        #jobs_list = jobs_list.filter(Load_L1Hits = None)
     
     paths = []
     for job in jobs_list:
@@ -235,18 +237,20 @@ def sys_plot(request, pk):
     return response
 
 
-def dates(request):
-
+def dates(request, error = False):
     month_dict ={}
     dates = Job.objects.dates('date','day')
     for date in dates:
         y,m,d = date.strftime('%Y-%m-%d').split('-')
-        key = y+' / '+m
+        key = y+'-'+m
         month_dict.setdefault(key, [])
         month_dict[key].append((y+'-'+m+'-'+d, d))
         
     field = {}
-    field['date_list'] = sorted(month_dict.iteritems())
+    field["machine_name"] = cfg.host_name_ext
+
+    field['date_list'] = sorted(month_dict.iteritems())[::-1]
+    field['error'] = error
     return render_to_response("machine/search.html", field)
 
 def search(request):
@@ -275,14 +279,17 @@ def search(request):
         return index(request, **fields)
     except: pass
 
-    return render(request, 'machine/search.html', {'error' : True})
-
+    return dates(request, error = True)
+    
 
 def index(request, **field):
+
+
     print 'index',field
     name = ''
     for key, val in field.iteritems():
         name += '['+key+'='+val+']-'
+
 
     if 'run_time__gte' in field: pass
     else: field['run_time__gte'] = 60
@@ -291,6 +298,13 @@ def index(request, **field):
     if 'order_key' in field: 
         order_key = field['order_key']
         del field['order_key']
+        
+    if field.has_key('date'): 
+        date = field['date'].split('-')
+        if len(date) == 2:
+            field['date__year'] = date[0]
+            field['date__month'] = date[1]
+            del field['date']
 
     job_list = Job.objects.filter(**field).order_by(order_key)
 
@@ -330,62 +344,43 @@ def list_to_dict(job_list,metric):
     
 def hist_summary(job_list):
 
-    job_list = job_list.exclude(status__in=['CANCELLED','FAILED'])
     fig = Figure(figsize=(16,6))
 
-    # Run times
-    job_times = np.array(job_list.values_list('run_time',flat=True))/3600.
+    # Runtimes
+    jobs = np.array(job_list.values_list('run_time',flat=True))/3600.
     ax = fig.add_subplot(221)
-    ax.hist(job_times, max(5, 5*np.log(len(job_times))),log=True)
-    ax.set_xlim((0,max(job_times)+1))
+    bins = np.linspace(0, max(jobs), max(5, 5*np.log(len(jobs))))
+    ax.hist(jobs, bins = bins, log=True)
     ax.set_ylabel('# of jobs')
-    ax.set_xlabel('# hrs')
-    ax.set_title('Run Times for Completed Jobs')
+    ax.set_xlabel('hrs')
+    ax.set_title('Runtime')
 
-    # Number of cores
-    job_size =  np.array(job_list.values_list('cores',flat=True))
+    # Nodes
+    jobs =  np.array(job_list.values_list('nodes',flat=True))
     ax = fig.add_subplot(222)
-    ax.hist(job_size, max(5, 5*np.log(len(job_size))),log=True)
-    ax.set_xlim((0,max(job_size)+1))
-    ax.set_title('Run Sizes for Completed Jobs')
-    ax.set_xlabel('# cores')
-    
-    first = 'cpi'
-    second = 'flops'
+    bins = np.linspace(0, max(jobs), max(5, 5*np.log(len(jobs))))
+    ax.hist(jobs, bins = bins, log=True)
+    ax.set_title('Size')
+    ax.set_xlabel('nodes')
 
-    tmp = job_list.exclude(Q(**{first : None}) | Q(**{second : None}))
-
-    cpi = []
-    gflops = []
-    
-    for job in tmp: 
-        cpi.append(getattr(job,first))
-        gflops.append(getattr(job,second))
-
+    # Queue Wait Time
+    jobs =  (np.array(job_list.values_list('start_epoch',flat=True))-np.array(job_list.values_list('queue_time',flat=True)))/3600.
+    ax = fig.add_subplot(223)
+    bins = np.linspace(0, max(jobs), max(5, 5*np.log(len(jobs))))
+    ax.hist(jobs, bins = bins, log=True)
+    ax.set_ylabel('# of jobs')
+    ax.set_title('Queue Wait Time')
+    ax.set_xlabel('hrs')
+    jobs =  np.array(job_list.filter(status = "FAILED").values_list('nodes',flat=True))
+    ax = fig.add_subplot(224)
     try:
-        # CPI
-        job_cpi = np.array(cpi)
-        ax = fig.add_subplot(223)
-        job_cpi = job_cpi[job_cpi<5.0]
-        mean_cpi = job_cpi.mean()
-        std_cpi = job_cpi.std()
-        ax.hist(job_cpi, max(5, 5*np.log(len(job_cpi))),log=True)
-        ax.set_ylabel('# of jobs')
-        ax.set_title('CPI (Jobs > 1 hr) '+r'$\bar{Mean}=$'+'{0:.2f}'.format(mean_cpi)+' '+r'$\pm$' +  '{0:.2f}'.format(std_cpi))
-        ax.set_xlabel('CPI')
+        bins = np.linspace(0, max(jobs), max(5, 5*np.log(len(jobs))))
+        ax.hist(jobs, bins = bins, log=True)
     except: pass
-    try:
-        # FLOPS
-        job_flops = np.array(gflops)
-        job_flops = job_flops[job_flops<400]
-        mean_flops = job_flops.mean()
-        std_flops = job_flops.std()
-        ax = fig.add_subplot(224)        
-        ax.hist(job_flops, max(5, 5*np.log(len(job_flops))),log=True)
-        ax.set_ylabel('# of jobs')
-        ax.set_title('GFLOPS/Node (Jobs > 1 hr) '+r'$\bar{Mean}=$'+'{0:.2f}'.format(mean_flops)+' '+r'$\pm$' +  '{0:.2f}'.format(std_flops))
-        ax.set_xlabel('GFLOPS')
-    except: pass
+    ax.set_title('Failed Jobs')
+    ax.set_xlabel('nodes')
+
+
     fig.subplots_adjust(hspace=0.5)      
     canvas = FigureCanvas(fig)
     
@@ -394,12 +389,6 @@ def hist_summary(job_list):
     fig.savefig(imgdata, format='png')
     imgdata.seek(0)
     response = "data:image/png;base64,%s" % base64.b64encode(imgdata.buf)
-    
-    """
-    response = HttpResponse(content_type='data:image/png;base64')
-    response['Content-Disposition'] = "attachment; filename="+name+"hist.png"
-    fig.savefig(response, format='png')
-    """
 
     return response
 
@@ -428,12 +417,15 @@ def master_plot(request, pk):
 def heat_map(request, pk):    
     data = get_data(pk)
     hm = plots.HeatMap(k1={'intel_snb' : ['intel_snb','intel_snb'],
-                           'intel_hsw' : ['intel_hsw','intel_hsw']
+                           'intel_hsw' : ['intel_hsw','intel_hsw'],
+                           'intel_pmc3' : ['intel_pmc3','intel_pmc3']
                            },
                        k2={'intel_snb' : ['CLOCKS_UNHALTED_REF', 
                                           'INSTRUCTIONS_RETIRED'],
                            'intel_hsw' : ['CLOCKS_UNHALTED_REF', 
-                                          'INSTRUCTIONS_RETIRED']
+                                          'INSTRUCTIONS_RETIRED'],
+                           'intel_pmc3' : ['CLOCKS_UNHALTED_REF', 
+                                           'INSTRUCTIONS_RETIRED']                           
                            },
                        lariat_data="pass")
     hm.plot(pk,job_data=data)
@@ -462,6 +454,8 @@ class JobDetailView(DetailView):
                 '<': operator.le, '<=': operator.le,
                 '==': operator.eq}
         
+        
+        print ">>>>>>>>>>>>>>>>>>>>>>>>"
         testinfo_dict = {}
         for obj in TestInfo.objects.all():
             obj.test_name,
@@ -469,31 +463,38 @@ class JobDetailView(DetailView):
             test = test_type(min_time=0,ignore_qs=[])
             try: 
                 metric = test.test(job.path,data)
+                print metric
+                if not metric: continue            
                 setattr(job,obj.field_name,metric)
                 result = comp[obj.comparator](metric, obj.threshold)
-                
                 if result: string = 'Failed'
                 else: string = 'Passed'
                 testinfo_dict[obj.test_name] = (metric,obj.threshold,string)
             except: continue
-
         context['testinfo_dict'] = testinfo_dict
 
+        proc_list = []
         type_list = []
         host_list = []
 
         for host_name, host in data.hosts.iteritems():
+            if host.stats.has_key('proc'):
+                proc_list += host.stats['proc'] 
+                proc_list = list(set(proc_list))
             host_list.append(host_name)
+
         if len(host_list) != job.nodes:
             job.status = str(job.nodes-len(host_list))+"_NODES_MISSING"
         host0=data.hosts.values()[0]
         for type_name, type in host0.stats.iteritems():
             schema = ' '.join(build_schema(data,type_name))
-            type_list.append( (type_name, schema) )
+            type_list.append( (type_name, schema[0:200]) )
 
         type_list = sorted(type_list, key = lambda type_name: type_name[0])
-        context['type_list'] = type_list
+
+        context['proc_list'] = proc_list
         context['host_list'] = host_list
+        context['type_list'] = type_list
 
         urlstring="https://scribe.tacc.utexas.edu:8000/en-US/app/search/search?q=search%20kernel:"
         hoststring=urlstring+"%20host%3D"+host_list[0]
@@ -515,17 +516,31 @@ def type_plot(request, pk, type_name):
     schema = [x.split(',')[0] for x in schema]
 
     k1 = {'intel_snb' : [type_name]*len(schema),
-          'intel_hsw' : [type_name]*len(schema)}
+          'intel_hsw' : [type_name]*len(schema),
+          'intel_pmc3' : [type_name]*len(schema)
+          }
     k2 = {'intel_snb': schema,
-          'intel_hsw': schema}
+          'intel_hsw': schema,
+          'intel_pmc3': schema
+          }
 
     tp = plots.DevPlot(k1=k1,k2=k2,lariat_data='pass')
     tp.plot(pk,job_data=data)
     return figure_to_response(tp)
 
+def proc_detail(data):
+    print data.get_schema('proc').keys()
+    for host_name, host in data.hosts.iteritems():        
+        for proc_name, proc in host.stats['proc'].iteritems():
+            print proc_name, proc[-1]
+            
 
 def type_detail(request, pk, type_name):
     data = get_data(pk)
+
+    if type_name == 'proc':
+        proc_detail(data)
+    else: pass
 
     schema = build_schema(data,type_name)
     raw_stats = data.aggregate_stats(type_name)[0]  
