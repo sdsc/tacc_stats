@@ -1,5 +1,7 @@
 # Django settings for tacc_stats_site project.
 import os
+import tacc_stats.cfg as cfg
+import tacc_stats.site.tacc_stats_site as tacc_stats_site
 DIR = os.path.dirname(os.path.abspath(__file__))
 
 DEBUG = True
@@ -20,6 +22,8 @@ DATABASES = {
         'HOST' : 'localhost'
         }
     }
+
+print '>>>>>>>>>>>>', DATABASES
 
 # Hosts/domain names that are valid for this site; required if DEBUG is False
 # See https://docs.djangoproject.com/en/1.5/ref/settings/#allowed-hosts
@@ -108,7 +112,7 @@ MIDDLEWARE_CLASSES = (
 ROOT_URLCONF = 'tacc_stats_site.urls'
 
 # Python dotted path to the WSGI application used by Django's runserver.
-WSGI_APPLICATION = 'tacc_stats_site.wsgi.application'
+WSGI_APPLICATION = 'tacc_stats.site.tacc_stats_site.wsgi.application'
 
 TEMPLATE_DIRS = (
     os.path.join(DIR,'templates'),
@@ -130,7 +134,7 @@ INSTALLED_APPS = (
     #'django_pdf',
     # Uncomment the next line to enable admin documentation:
     # 'django.contrib.admindocs',
-    'tacc_stats.site.comet',
+    'tacc_stats.site.machine',
 )
 """
 TEMPLATE_CONTEXT_PROCESSORS=(

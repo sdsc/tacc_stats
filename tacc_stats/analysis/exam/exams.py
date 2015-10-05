@@ -54,6 +54,7 @@ class Auditor():
         raise tspl.TSPLException('End of file found for: ' + jobpath)
 
     for name, measure in self.measures.iteritems():
+      print( name)
       self.metrics[name][job_data.id] = measure.test(jobpath,job_data)
 
   # Compare metric to threshold
@@ -89,7 +90,7 @@ class Test(object):
     self.min_time=kwargs.get('min_time',3600)
     self.min_hosts=kwargs.get('min_hosts',1)    
     self.ignore_qs=kwargs.get('ignore_qs',['gpu','gpudev','vis','visdev','development'])
-    self.waynesses=kwargs.get('waynesses',[x+1 for x in range(32)])
+    self.waynesses=kwargs.get('waynesses',[x+1 for x in range(64)])
     self.ignore_status=kwargs.get('ignore_status',[])
 
   # Sets up particular combination of events and filters
@@ -101,11 +102,11 @@ class Test(object):
       else:
         self.ts=tspl.TSPLBase(job_path,self.k1,self.k2,job_data=job_data)
     except tspl.TSPLException as e:
+      print(sys.exc_info()[0])
       return False
     except EOFError as e:
       print('End of file found reading: ' + job_path)
       return False
-    
     return tspl_utils.checkjob(self.ts,
                                self.min_time,
                                self.min_hosts,
@@ -135,7 +136,8 @@ class Test(object):
       # Compute metric of interest
       self.compute_metric()
     except: 
-      pass
+      print("Test failed",sys.exc_info()[0])
+
     return self.metric
 
 

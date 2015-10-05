@@ -7,11 +7,9 @@
 #include <sys/utsname.h>
 #include <syslog.h>
 
-#ifdef RMQ
 #include <amqp_tcp_socket.h>
 #include <amqp.h>
 #include <amqp_framing.h>
-#endif
 
 #include "stats.h"
 #include "stats_buffer.h"
@@ -34,7 +32,6 @@
     free(tmp_string);						\
   } while(0)
 
-#ifdef RMQ
 static char * readFile(char* path) {
   char * buffer = 0;
   long length;
@@ -103,12 +100,6 @@ static int send(struct stats_buffer *sf)
 
   return 0;
 }
-#else
-static int send(struct stats_buffer *sf) {
-  syslog(LOG_INFO, "%s\n", sf->sf_data);
-  return 0;
-}
-#endif
 
 int stats_wr_hdr(struct stats_buffer *sf)
 {
@@ -205,7 +196,7 @@ int stats_buffer_write(struct stats_buffer *sf)
   size_t i = 0;
   struct stats_type *type;
   while ((type = stats_type_for_each(&i)) != NULL) {
-    if (!(type->st_enabled && type->st_selected))
+    if (!(type->st_enabled))
       continue;
 
     size_t j = 0;

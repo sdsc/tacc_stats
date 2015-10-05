@@ -47,6 +47,11 @@ def update_comp_info(thresholds = None):
                   'CPU_Usage' : ['CPU_Usage','<',800],
                   'MIC_Usage' : ['MIC_Usage','>',0.0],
                   'Load_All' : ['Load_All','<',1e7],
+                  'MetaDataRate' : ['MetaDataRate','>',10000],
+                  'InternodeIBAveBW' : ['InternodeIBAveBW', '>', 10000],
+                  'InternodeIBMaxBW' : ['InternodeIBMaxBW', '>', 10000],
+                  'LnetAveBW'  : ['LnetAveBW', '>', 10000],
+                  'LnetMaxBW'  : ['LnetMaxBW', '>', 10000],
                   }
     if thresholds:
         for key,val in thresholds.iteritems():
@@ -165,6 +170,7 @@ def update_metric_fields(date,rerun=False):
     aud.stage(exam.CPU_Usage, ignore_qs = [], min_time = 0)
     aud.stage(exam.MIC_Usage, ignore_qs = [], min_time = 0)
     aud.stage(exam.Load_All, ignore_qs = [], min_time = 0)
+    aud.stage(exam.MetaDataRate, ignore_qs = [], min_time = 0)
 
     print 'Run the following tests for:',date
     for name, test in aud.measures.iteritems():
@@ -318,21 +324,29 @@ def index(request, **field):
     field['cat_job_list']  = job_list.filter(Q(cat__lte = 0.001) | Q(cat__gte = 1000)).exclude(cat = None)
     
     completed_list = job_list.exclude(status__in=['CANCELLED','FAILED']).order_by('-id')
-    field['idle_job_list'] = completed_list.filter(idle__gte = 0.99)
-    field['mem_job_list'] = completed_list.filter(mem__lte = 30, queue = 'largemem')
+    if len(completed_list) > 0:
+        try: 
+            field['md_job_list'] = job_list.order_by('-MetaDataRate')[0:10]
+        except:
+            field['md_job_list'] = job_list.order_by('-MetaDataRate')
+        field['idle_job_list'] = completed_list.filter(idle__gte = 0.99)
+        field['mem_job_list'] = completed_list.filter(mem__lte = 30, queue = 'largemem')
 
-    field['cpi_thresh'] = 1.5
-    field['cpi_job_list']  = completed_list.exclude(cpi = None).filter(cpi__gte = field['cpi_thresh'])
-    field['cpi_per'] = 100*field['cpi_job_list'].count()/float(completed_list.count())
+        field['cpi_thresh'] = 1.5
+        field['cpi_job_list']  = completed_list.exclude(cpi = float('nan')).filter(cpi__gte = field['cpi_thresh'])
+        field['cpi_per'] = 100*field['cpi_job_list'].count()/float(completed_list.count())
 
-    field['gigebw_thresh'] = 2**20
-    field['gigebw_job_list']  = completed_list.exclude(GigEBW = None).filter(GigEBW__gte = field['gigebw_thresh'])
-
-    field['idle_job_list'] = list_to_dict(field['idle_job_list'],'idle')
-    field['cat_job_list'] = list_to_dict(field['cat_job_list'],'cat')
-    field['cpi_job_list'] = list_to_dict(field['cpi_job_list'],'cpi')
-    field['mem_job_list'] = list_to_dict(field['mem_job_list'],'mem')
-    field['gigebw_job_list'] = list_to_dict(field['gigebw_job_list'],'GigEBW')
+        field['gigebw_thresh'] = 2**20
+        field['gigebw_job_list']  = completed_list.exclude(GigEBW = float('nan')).filter(GigEBW__gte = field['gigebw_thresh'])
+        try:
+            field['md_job_list'] = list_to_dict(field['md_job_list'],'MetaDataRate')
+        except: 
+            field['md_job_list'] = None
+        field['idle_job_list'] = list_to_dict(field['idle_job_list'],'idle')
+        field['cat_job_list'] = list_to_dict(field['cat_job_list'],'cat')
+        field['cpi_job_list'] = list_to_dict(field['cpi_job_list'],'cpi')
+        field['mem_job_list'] = list_to_dict(field['mem_job_list'],'mem')
+        field['gigebw_job_list'] = list_to_dict(field['gigebw_job_list'],'GigEBW')
 
     return render_to_response("machine/index.html", field)
 
@@ -371,14 +385,15 @@ def hist_summary(job_list):
     ax.set_ylabel('# of jobs')
     ax.set_title('Queue Wait Time')
     ax.set_xlabel('hrs')
-    jobs =  np.array(job_list.filter(status = "FAILED").values_list('nodes',flat=True))
+    #jobs =  np.array(job_list.filter(status = "FAILED").values_list('nodes',flat=True))
+    jobs =  np.array(job_list.values_list('MetaDataRate',flat=True))
     ax = fig.add_subplot(224)
     try:
         bins = np.linspace(0, max(jobs), max(5, 5*np.log(len(jobs))))
         ax.hist(jobs, bins = bins, log=True)
     except: pass
-    ax.set_title('Failed Jobs')
-    ax.set_xlabel('nodes')
+    ax.set_title('Metadata Reqs')
+    ax.set_xlabel('<reqs>/s')
 
 
     fig.subplots_adjust(hspace=0.5)      
@@ -410,7 +425,7 @@ def get_data(pk):
 
 def master_plot(request, pk):
     data = get_data(pk)
-    mp = plots.MasterPlot(lariat_data="pass")
+    mp = plots.MasterPlot()
     mp.plot(pk,job_data=data)
     return figure_to_response(mp)
 
@@ -418,9 +433,12 @@ def heat_map(request, pk):
     data = get_data(pk)
     hm = plots.HeatMap(k1={'intel_snb' : ['intel_snb','intel_snb'],
                            'intel_hsw' : ['intel_hsw','intel_hsw'],
+                           'intel_ivb' : ['intel_ivb','intel_ivb'],
                            'intel_pmc3' : ['intel_pmc3','intel_pmc3']
                            },
                        k2={'intel_snb' : ['CLOCKS_UNHALTED_REF', 
+                                          'INSTRUCTIONS_RETIRED'],
+                           'intel_ivb' : ['CLOCKS_UNHALTED_REF', 
                                           'INSTRUCTIONS_RETIRED'],
                            'intel_hsw' : ['CLOCKS_UNHALTED_REF', 
                                           'INSTRUCTIONS_RETIRED'],
@@ -458,7 +476,7 @@ class JobDetailView(DetailView):
         print ">>>>>>>>>>>>>>>>>>>>>>>>"
         testinfo_dict = {}
         for obj in TestInfo.objects.all():
-            obj.test_name,
+            print obj.test_name,
             test_type = getattr(sys.modules[exam.__name__],obj.test_name)
             test = test_type(min_time=0,ignore_qs=[])
             try: 
@@ -517,10 +535,12 @@ def type_plot(request, pk, type_name):
 
     k1 = {'intel_snb' : [type_name]*len(schema),
           'intel_hsw' : [type_name]*len(schema),
+          'intel_ivb' : [type_name]*len(schema),
           'intel_pmc3' : [type_name]*len(schema)
           }
     k2 = {'intel_snb': schema,
           'intel_hsw': schema,
+          'intel_ivb' : schema,
           'intel_pmc3': schema
           }
 
