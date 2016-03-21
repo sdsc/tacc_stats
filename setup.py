@@ -277,7 +277,7 @@ if MODE == 'DAEMON':
     sources   += [pjoin(root,'amqp_listen.c'), 
                   pjoin(root,'stats_buffer.c'), pjoin(root,'monitor.c')]
     include_dirs += [cfg_data.get('RMQ_CFG', 'RMQ_PATH')+"/include"]
-    extra_objects += [cfg_data.get('RMQ_CFG', 'RMQ_PATH')+"/lib64/librabbitmq.a"]
+    extra_objects += [cfg_data.get('RMQ_CFG', 'RMQ_PATH')+"/lib64/librabbitmq.so"]
     SERVER = cfg_data.get('RMQ_CFG', 'RMQ_SERVER')
     define_macros += [('HOST_NAME_QUEUE',
                        '\"'+cfg_data.get('RMQ_CFG', 'HOST_NAME_QUEUE')+'\"')]
