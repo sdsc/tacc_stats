@@ -54,8 +54,8 @@ CLASSIFIERS = [
 ]
 
 MAJOR = 2
-MINOR = 1
-MICRO = 0
+MINOR = 2
+MICRO = 1
 ISRELEASED = False
 VERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
 QUALIFIER = ''
@@ -126,7 +126,7 @@ def read_site_cfg():
 
 def write_stats_x(cfg_data):    
     chip_types = [
-        'amd64_pmc', 'intel_nhm', 'intel_wtm',
+        'amd64_pmc', 'intel_nhm', 'intel_wtm', 'intel_rapl',
         'intel_hsw', 'intel_hsw_cbo', 'intel_hsw_pcu', 'intel_hsw_imc', 'intel_hsw_qpi', 'intel_hsw_hau', 'intel_hsw_r2pci',
         'intel_ivb', 'intel_ivb_cbo', 'intel_ivb_pcu', 'intel_ivb_imc', 'intel_ivb_qpi', 'intel_ivb_hau', 'intel_ivb_r2pci',
         'intel_snb', 'intel_snb_cbo', 'intel_snb_pcu', 'intel_snb_imc', 'intel_snb_qpi', 'intel_snb_hau', 'intel_snb_r2pci'
@@ -141,7 +141,8 @@ def write_stats_x(cfg_data):
         'mic'
         ]
     os_types  = [         
-        'block', 'cpu', 'mem', 'net', 'nfs', 'numa', 'proc', 'ps', 'sysv_shm', 'tmpfs', 'vfs', 'vm'
+        'block', 'cpu', 'mem', 'net', 'nfs', 'numa', 'proc',
+        'ps', 'sysv_shm', 'tmpfs', 'vfs', 'vm'
         ]
 
     types = chip_types + os_types
@@ -234,18 +235,25 @@ sources=[
     pjoin(root,'collect.c'),  pjoin(root,'stats.c')
     ]
 with open(pjoin(root, 'stats.x'), 'r') as fd:
-    for dev_type in fd.read().split():
+    for dev_type in fd.read().split():        
         sources += [pjoin(root, dev_type.lstrip('X(').rstrip(')') + '.c')]
 
 FREQUENCY = cfg_data.get('OPTIONS', 'FREQUENCY')
 include_dirs = []
 library_dirs = []
-libraries    = []
+extra_objects = []
+libraries    = ['m','rt']
 
 if cfg_data.getboolean('OPTIONS', 'IB'):
     ib_dir        = "/usr"
     include_dirs += [pjoin(ib_dir,'include')]
+    include_dirs += ['/opt/ofed/include']
     library_dirs += [pjoin(ib_dir,'lib64')]
+
+    ib_dir        = "/opt/ofed"
+    include_dirs += [pjoin(ib_dir,'include')]
+    library_dirs += [pjoin(ib_dir,'lib64')]
+
     libraries    += ['ibmad']
 
 if cfg_data.getboolean('OPTIONS', 'PHI'):
@@ -262,14 +270,14 @@ define_macros=[('STATS_DIR_PATH','\"'+paths['stats_dir']+'\"'),
                ('STATS_LOCK_PATH','\"'+paths['stats_lock']+'\"'),
                ('JOBID_FILE_PATH','\"'+paths['jobid_file']+'\"'),
                ('FREQUENCY',FREQUENCY)]
-
+flags=[]
 MODE = cfg_data.get('OPTIONS', 'MODE') 
 if MODE == 'DAEMON': 
     print "\n--- Building linux daemon for monitoring ---\n"
     sources   += [pjoin(root,'amqp_listen.c'), 
                   pjoin(root,'stats_buffer.c'), pjoin(root,'monitor.c')]
-    libraries += ['rabbitmq']
-
+    include_dirs += [cfg_data.get('RMQ_CFG', 'RMQ_PATH')+"/include"]
+    extra_objects += [cfg_data.get('RMQ_CFG', 'RMQ_PATH')+"/lib64/librabbitmq.a"]
     SERVER = cfg_data.get('RMQ_CFG', 'RMQ_SERVER')
     define_macros += [('HOST_NAME_QUEUE',
                        '\"'+cfg_data.get('RMQ_CFG', 'HOST_NAME_QUEUE')+'\"')]
@@ -278,16 +286,18 @@ elif MODE == "CRON":
     sources += [pjoin(root,'stats_file.c'), pjoin(root,'main.c')]
 else:
     print "BUILD ERROR: Set mode to either DAEMON or CRON"
-    
-flags = ['-D_GNU_SOURCE', '-Wp,-U_FORTIFY_SOURCE',
+    sys.exit(1)
+flags += ['-D_GNU_SOURCE', '-Wp,-U_FORTIFY_SOURCE',
          '-O3', '-Wall', '-g', '-UDEBUG']
 
 ext_data=dict(
     sources            = sources,
+    extra_compile_args = flags,
+    extra_objects      = extra_objects,
+    extra_link_args    = [],
     include_dirs       = [root] + include_dirs,
     library_dirs       = library_dirs,
-    libraries          = libraries,
-    extra_compile_args = flags,
+    libraries          = libraries + ['m', 'rt'],
     define_macros      = define_macros
     )
 
@@ -317,7 +327,7 @@ class MyBDist_RPM(bdist_rpm):
         ### Prep section
         self.prep_script = "build/bdist_rpm_prep"
         prep_cmds = """
-%define _bindir /opt/%{name}
+%define _bindir /opt/apps/%{name}
 %setup -n %{name}-%{unmangled_version}
 """
         prep_cmds += "%define lockfile " + paths['stats_lock'] + "\n"
@@ -325,10 +335,8 @@ class MyBDist_RPM(bdist_rpm):
             prep_cmds += """
 %define crontab_file /etc/cron.d/%{name}
 %define stats_dir /var/log/%{name}
-%define archive_dir /scratch/projects/%{name}/archive
-"""
-        #if MODE == "DAEMON":
-        #    prep_cmds += "%define server " + "-s "+SERVER
+%define archive_dir """ + paths["archive_dir"]
+
         open(self.prep_script,"w").write(prep_cmds)
         
         ### Build Section
@@ -406,33 +414,28 @@ fi
 class MyBuildExt(build_ext):
     def build_extension(self,ext):
         
-        sources = ext.sources
-        sources = list(sources)
+        sources = list(ext.sources)
         ext_path = self.get_ext_fullpath(ext.name)
-        depends = sources + ext.depends
         extra_args = ext.extra_compile_args or []
         macros = ext.define_macros[:]
         for undef in ext.undef_macros:
             macros.append((undef,))
-
+        
         objects = self.compiler.compile(sources,
                                         output_dir=self.build_temp,
                                         macros=macros,
                                         include_dirs=ext.include_dirs,
-                                        extra_postargs=extra_args,
+                                        extra_preargs=extra_args,
                                         depends=ext.depends)
         self._built_objects = objects[:]
 
-        if ext.extra_objects:
-            objects.extend(ext.extra_objects)
-        extra_args = ext.extra_link_args or []
-
         language = ext.language or self.compiler.detect_language(sources)
-
+        
         if MODE == "DAEMON":
+            print ext.extra_objects
             self.compiler.link_executable([pjoin(self.build_temp,
                                                  root,
-                                                 'amqp_listen.o')],
+                                                 'amqp_listen.o')] + ext.extra_objects,
                                           'build/bin/listend',
                                           libraries=ext.libraries,
                                           library_dirs=ext.library_dirs,
@@ -440,22 +443,23 @@ class MyBuildExt(build_ext):
                                           target_lang=language)
             objects.remove(pjoin(self.build_temp, root, 'amqp_listen.o'))
 
-        self.compiler.link_executable(objects, 
+        self.compiler.link_executable(objects + ext.extra_objects,
                                       'build/bin/monitor',
                                       libraries=ext.libraries,
                                       library_dirs=ext.library_dirs,
-                                      extra_postargs=extra_args,
+                                      extra_preargs=extra_args,
                                       target_lang=language)
-        self.compiler.link_shared_object(objects, 
+
+        self.compiler.link_shared_object(objects + ext.extra_objects, 
                                          ext_path,
                                          libraries=ext.libraries,
                                          library_dirs=ext.library_dirs,
-                                         extra_postargs=extra_args,
+                                         extra_preargs=extra_args,
                                          debug=self.debug,
                                          build_temp=self.build_temp,
                                          target_lang=language)
 
-extensions.append(Extension('tacc_stats.monitor', **ext_data))
+extensions.append(Extension('monitor', **ext_data))
 
 scripts=[
     'build/bin/monitor',             
@@ -470,6 +474,7 @@ scripts=[
     ]
 
 if MODE == "DAEMON": 
+    print 'data will go to',SERVER
     cfg_sh(pjoin(root, 'taccstats.in'), 
            dict(paths.items() + cfg_data.items('RMQ_CFG')))
 

@@ -25,7 +25,7 @@ from datetime import datetime
 import numpy as np
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
-from django.core.cache import cache,get_cache 
+from django.core.cache import cache 
 import traceback
 
 def update_comp_info(thresholds = None):
@@ -52,6 +52,11 @@ def update_comp_info(thresholds = None):
                   'InternodeIBMaxBW' : ['InternodeIBMaxBW', '>', 10000],
                   'LnetAveBW'  : ['LnetAveBW', '>', 10000],
                   'LnetMaxBW'  : ['LnetMaxBW', '>', 10000],
+                  'MDCReqs'  : ['MDCReqs', '>', 10000],
+                  'OSCReqs'  : ['OSCReqs', '>', 10000],
+                  'OSCWait'  : ['OSCWait', '>', 10000],
+                  'MDCWait'  : ['MDCWait', '>', 10000],
+                  'LLiteOpenClose'  : ['LLiteOpenClose', '>', 10000],
                   }
     if thresholds:
         for key,val in thresholds.iteritems():
@@ -171,6 +176,15 @@ def update_metric_fields(date,rerun=False):
     aud.stage(exam.MIC_Usage, ignore_qs = [], min_time = 0)
     aud.stage(exam.Load_All, ignore_qs = [], min_time = 0)
     aud.stage(exam.MetaDataRate, ignore_qs = [], min_time = 0)
+    aud.stage(exam.LnetAveBW, ignore_qs=[], min_time = 0)
+    aud.stage(exam.LnetMaxBW, ignore_qs=[], min_time = 0)
+    aud.stage(exam.InternodeIBAveBW, ignore_qs=[], min_time = 0)
+    aud.stage(exam.InternodeIBMaxBW, ignore_qs=[], min_time = 0)
+    aud.stage(exam.MDCReqs, ignore_qs=[], min_time = 0)
+    aud.stage(exam.MDCWait, ignore_qs=[], min_time = 0)
+    aud.stage(exam.OSCReqs, ignore_qs=[], min_time = 0)
+    aud.stage(exam.OSCWait, ignore_qs=[], min_time = 0)
+    aud.stage(exam.LLiteOpenClose, ignore_qs=[], min_time = 0)
 
     print 'Run the following tests for:',date
     for name, test in aud.measures.iteritems():
@@ -181,8 +195,8 @@ def update_metric_fields(date,rerun=False):
     jobs_list = Job.objects.filter(date = date).exclude(run_time__lt = 0)
 
     # Use mem to see if job was tested.  It will always exist
-    #if not rerun:
-        #jobs_list = jobs_list.filter(Load_L1Hits = None)
+    if not rerun:
+        jobs_list = jobs_list.filter(Load_L1Hits = None)
     
     paths = []
     for job in jobs_list:
@@ -199,9 +213,10 @@ def update_metric_fields(date,rerun=False):
 
     for name, results in aud.metrics.iteritems():
         obj = TestInfo.objects.get(test_name = name)
-        for jobid in results.keys():
+        print name,len(results.keys())
+        for jobid, result in results.iteritems():            
             try:
-                jobs_list.filter(id = jobid).update(**{ obj.field_name : results[jobid]})
+                jobs_list.filter(id = jobid).update(**{ obj.field_name : result })
             except:
                 pass
 
@@ -297,8 +312,8 @@ def index(request, **field):
         name += '['+key+'='+val+']-'
 
 
-    if 'run_time__gte' in field: pass
-    else: field['run_time__gte'] = 60
+    #if 'run_time__gte' in field: pass
+    #else: field['run_time__gte'] = 60
 
     order_key = '-id'
     if 'order_key' in field: 
@@ -364,7 +379,7 @@ def hist_summary(job_list):
     jobs = np.array(job_list.values_list('run_time',flat=True))/3600.
     ax = fig.add_subplot(221)
     bins = np.linspace(0, max(jobs), max(5, 5*np.log(len(jobs))))
-    ax.hist(jobs, bins = bins, log=True)
+    ax.hist(jobs, bins = bins, log=True, color='#bf0a30')
     ax.set_ylabel('# of jobs')
     ax.set_xlabel('hrs')
     ax.set_title('Runtime')
@@ -373,7 +388,7 @@ def hist_summary(job_list):
     jobs =  np.array(job_list.values_list('nodes',flat=True))
     ax = fig.add_subplot(222)
     bins = np.linspace(0, max(jobs), max(5, 5*np.log(len(jobs))))
-    ax.hist(jobs, bins = bins, log=True)
+    ax.hist(jobs, bins = bins, log=True, color='#bf0a30')
     ax.set_title('Size')
     ax.set_xlabel('nodes')
 
@@ -381,7 +396,7 @@ def hist_summary(job_list):
     jobs =  (np.array(job_list.values_list('start_epoch',flat=True))-np.array(job_list.values_list('queue_time',flat=True)))/3600.
     ax = fig.add_subplot(223)
     bins = np.linspace(0, max(jobs), max(5, 5*np.log(len(jobs))))
-    ax.hist(jobs, bins = bins, log=True)
+    ax.hist(jobs, bins = bins, log=True, color='#bf0a30')
     ax.set_ylabel('# of jobs')
     ax.set_title('Queue Wait Time')
     ax.set_xlabel('hrs')
@@ -390,7 +405,7 @@ def hist_summary(job_list):
     ax = fig.add_subplot(224)
     try:
         bins = np.linspace(0, max(jobs), max(5, 5*np.log(len(jobs))))
-        ax.hist(jobs, bins = bins, log=True)
+        ax.hist(jobs, bins = bins, log=True, color='#bf0a30')
     except: pass
     ax.set_title('Metadata Reqs')
     ax.set_xlabel('<reqs>/s')
@@ -497,7 +512,15 @@ class JobDetailView(DetailView):
 
         for host_name, host in data.hosts.iteritems():
             if host.stats.has_key('proc'):
-                proc_list += host.stats['proc'] 
+                for proc_pid,val in host.stats['proc'].iteritems():
+                    if job.uid == val[0][0]:
+
+                        try: 
+                            proc = proc_pid.split('/')[0]
+                        except:
+                            proc = proc_pid
+
+                        proc_list += [proc]
                 proc_list = list(set(proc_list))
             host_list.append(host_name)
 
@@ -548,19 +571,8 @@ def type_plot(request, pk, type_name):
     tp.plot(pk,job_data=data)
     return figure_to_response(tp)
 
-def proc_detail(data):
-    print data.get_schema('proc').keys()
-    for host_name, host in data.hosts.iteritems():        
-        for proc_name, proc in host.stats['proc'].iteritems():
-            print proc_name, proc[-1]
-            
-
 def type_detail(request, pk, type_name):
     data = get_data(pk)
-
-    if type_name == 'proc':
-        proc_detail(data)
-    else: pass
 
     schema = build_schema(data,type_name)
     raw_stats = data.aggregate_stats(type_name)[0]  
@@ -576,3 +588,26 @@ def type_detail(request, pk, type_name):
 
     return render_to_response("machine/type_detail.html",{"type_name" : type_name, "jobid" : pk, "stats_data" : stats, "schema" : schema})
 
+def proc_detail(request, pk, proc_name):
+
+    data = get_data(pk)
+    
+    host_map = {}
+    schema = data.get_schema('proc')
+    hwm_idx = schema['VmHWM'].index
+    hwm_unit = "gB"#schema['VmHWM'].unit
+    aff_idx = schema['Cpus_allowed_list'].index
+    thr_idx = schema['Threads'].index
+
+    for host_name, host in data.hosts.iteritems():
+
+        for proc_pid, val in host.stats['proc'].iteritems():
+            host_map.setdefault(host_name, {})
+            try:
+                proc_ = proc_pid.split('/')[0] 
+            except: 
+                proc_ = proc_pid
+            if  proc_ == proc_name:
+                host_map[host_name][proc_pid] = [ val[-1][hwm_idx]/2**20, format(int(val[-1][aff_idx]),'#018b')[2:], val[-1][thr_idx] ]
+
+    return render_to_response("machine/proc_detail.html",{"proc_name" : proc_name, "jobid" : pk, "host_map" : host_map, "hwm_unit" : hwm_unit})

@@ -239,9 +239,9 @@ static int sf_wr_hdr(struct stats_file *sf)
   #ifdef RMQ
   rmq_send(sf);
   #endif
-
+  free(sf->sf_data);
   fflush(sf->sf_file);
-
+  
   return 0;
 }
 
@@ -286,6 +286,7 @@ int stats_file_mark(struct stats_file *sf, const char *fmt, ...)
 
 int stats_file_close(struct stats_file *sf)
 {
+
   int rc = 0;
   if (sf->sf_empty)
     sf_wr_hdr(sf);
@@ -349,9 +350,9 @@ int stats_file_close(struct stats_file *sf)
   free(sf->sf_path);
   free(sf->sf_mark);
 
-#ifdef RMQ
+  //#ifdef RMQ
   free(sf->sf_data);
-#endif
+  //#endif
 
   memset(sf, 0, sizeof(struct stats_file));
 
