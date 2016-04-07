@@ -14,14 +14,12 @@ ADMINS = (
 MANAGERS = ADMINS
 
 DATABASES = {
-    'default' : {
-        'ENGINE' : 'django.db.backends.mysql',
-        'NAME' : 'xsede_stats_2',
-        'USER' : 'root',
-        'PASSWORD' : '',
-        'HOST' : 'localhost'
-        }
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'STORAGE_ENGINE': 'InnoDB',
+        'OPTIONS': {'read_default_file': '/etc/.xsede_stats.my.cnf'}
     }
+}
 
 print '>>>>>>>>>>>>', DATABASES
 
