@@ -15,21 +15,10 @@ MANAGERS = ADMINS
 # Give a name that is unique for the computing platform
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME'  : cfg.machine + '_db',
-        'USER': 'taccstats',
-        'PASSWORD': 'taccstats',
-        'HOST': 'localhost',         
-        'PORT': '5432',               
-        },
-    # Uncomment this portion if an xalt database exists
-    'xalt' : {
-        'ENGINE' : 'django.db.backends.mysql',
-        'NAME' : 'xalt',
-        'USER' : 'xaltUser',
-        'PASSWORD' : 'kutwgbh',
-        'HOST' : 'tacc-stats'
-        }        
+        'ENGINE': 'django.db.backends.mysql',
+        'STORAGE_ENGINE': 'InnoDB',
+        'OPTIONS': {'read_default_file': '/etc/.xsede_stats_comet.my.cnf'}
+        }
     }
 
 print '>>>>>>>>>>>>', DATABASES
