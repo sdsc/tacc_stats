@@ -27,6 +27,8 @@ scripts=[
     'tacc_stats/site/machine/thresholds.cfg',
     'tacc_stats/pickler/job_pickles.py',
     'tacc_stats/pickler/job_pickles_slurm.py',
+    'tacc_stats/pickler/account-parser-pbs.py',
+    'tacc_stats/pickler/account-parser.py',
     'tacc_stats/listend.py'
     ]
 
