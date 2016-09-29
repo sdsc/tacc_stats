@@ -35,12 +35,14 @@ static int send(struct stats_buffer *sf)
   amqp_connection_state_t conn;
   amqp_bytes_t reply_to_queue;
 
-  static int queue_declared = 0;
-
-  exchange = "amq.direct";
+  exchange = "stats-listener";
   conn = amqp_new_connection();
-  socket = amqp_tcp_socket_new(conn);
+  socket = amqp_ssl_socket_new(conn);
 
+  //http://stackoverflow.com/questions/22660940/rabbitmq-c-client-ssl-errors
+  amqp_ssl_socket_set_cacert(socket, "/var/secrets/cometvc/ca.pem");
+  amqp_ssl_socket_set_key(socket, "/var/secrets/cometvc/key.pem");
+  
   if (!socket) {
     ERROR("socket failed to initialize");
   }
@@ -49,33 +51,10 @@ static int send(struct stats_buffer *sf)
     ERROR("socket failed to open");
   }
 
-  amqp_login(conn, "/", 0, 131072, 0, AMQP_SASL_METHOD_PLAIN, 
-	     "guest", "guest");
+  // amqp_login(conn, "/", 0, 131072, 0, AMQP_SASL_METHOD_PLAIN, 
+	 //     "guest", "guest");
   amqp_channel_open(conn, 1);
   amqp_get_rpc_reply(conn);
-
-  if (!queue_declared) {
-    syslog(LOG_INFO, "Attempt declare queue on RMQ server\n");
-    amqp_queue_declare_ok_t *r = amqp_queue_declare(conn, 1, amqp_cstring_bytes(sf->sf_queue), 
-						    0, 1, 0, 0, amqp_empty_table);
-    amqp_rpc_reply_t ret = amqp_get_rpc_reply(conn);
-    if (ret.reply_type != AMQP_RESPONSE_NORMAL) {
-      ERROR("queue declare failed");
-      return -1;
-    }
-    else {
-      reply_to_queue = amqp_bytes_malloc_dup(r->queue);
-      if (reply_to_queue.bytes == NULL) {
-        syslog(LOG_ERR, "Out of memory while copying queue name");
-        return -1;
-      }
-      
-      amqp_queue_bind(conn, 1, reply_to_queue, amqp_cstring_bytes(exchange), 
-		      amqp_cstring_bytes(sf->sf_queue), amqp_empty_table);
-      amqp_get_rpc_reply(conn);
-      queue_declared = 1;
-    }
-  }
 
   {
     amqp_basic_properties_t props;
@@ -85,7 +64,7 @@ static int send(struct stats_buffer *sf)
     amqp_basic_publish(conn,
 		       1,
 		       amqp_cstring_bytes(exchange),
-		       amqp_cstring_bytes(sf->sf_queue),
+		       amqp_cstring_bytes(""),
 		       0,
 		       0,
 		       &props,
