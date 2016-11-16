@@ -6,7 +6,7 @@
 #include <stdarg.h>
 #include <sys/utsname.h>
 #include <syslog.h>
-#include <amqp.h>
+#include <amqp_ssl_socket.h>
 #include "stats.h"
 #include "stats_buffer.h"
 #include "schema.h"
@@ -39,13 +39,16 @@ static int send(struct stats_buffer *sf)
   conn = amqp_new_connection();
   socket = amqp_ssl_socket_new(conn);
 
+  amqp_ssl_socket_set_verify_peer(socket, 1);
+  amqp_ssl_socket_set_verify_hostname(socket, 1);
   //http://stackoverflow.com/questions/22660940/rabbitmq-c-client-ssl-errors
   amqp_ssl_socket_set_cacert(socket, "/var/secrets/cometvc/ca.pem");
-  amqp_ssl_socket_set_key(socket, "/var/secrets/cometvc/key.pem");
+  amqp_ssl_socket_set_key(socket, "/var/secrets/cometvc/cert.pem", "/var/secrets/cometvc/key.pem");
   
   if (!socket) {
     ERROR("socket failed to initialize");
   }
+
   status = amqp_socket_open(socket, sf->sf_host, atoi(sf->sf_port));
   if (status) {
     ERROR("socket failed to open");
@@ -53,14 +56,20 @@ static int send(struct stats_buffer *sf)
 
   // amqp_login(conn, "/", 0, 131072, 0, AMQP_SASL_METHOD_PLAIN, 
 	 //     "guest", "guest");
+  amqp_login(conn, "xsede_stats", 0, 131072, 0, AMQP_SASL_METHOD_EXTERNAL, "comet-stats.sdsc.edu");
   amqp_channel_open(conn, 1);
   amqp_get_rpc_reply(conn);
 
+  struct utsname uts_buf;
+  uname(&uts_buf);
+
   {
     amqp_basic_properties_t props;
-    props._flags = AMQP_BASIC_CONTENT_TYPE_FLAG | AMQP_BASIC_DELIVERY_MODE_FLAG;
+    props._flags = AMQP_BASIC_CONTENT_TYPE_FLAG | AMQP_BASIC_DELIVERY_MODE_FLAG | AMQP_BASIC_REPLY_TO_FLAG | AMQP_BASIC_TYPE_FLAG;
     props.content_type = amqp_cstring_bytes("text/plain");
     props.delivery_mode = 2; /* persistent delivery mode */
+    props.reply_to = amqp_cstring_bytes(uts_buf.nodename);
+    props.type = amqp_cstring_bytes("stat");
     amqp_basic_publish(conn,
 		       1,
 		       amqp_cstring_bytes(exchange),
