@@ -61,30 +61,6 @@ static int send(struct stats_buffer *sf)
   amqp_channel_open(conn, 1);
   amqp_get_rpc_reply(conn);
 
-  if (!queue_declared) {
-    syslog(LOG_INFO, "Attempt declare queue on RMQ server\n");
-    amqp_queue_declare_ok_t *r = amqp_queue_declare(conn, 1, amqp_cstring_bytes(sf->sf_queue), 
-						    0, 1, 0, 0, amqp_empty_table);
-    amqp_rpc_reply_t ret = amqp_get_rpc_reply(conn);
-    if (ret.reply_type != AMQP_RESPONSE_NORMAL) {
-      syslog(LOG_ERR, "queue declare failed");
-      return -1;
-    }
-    else {
-      amqp_bytes_t reply_to_queue;
-      reply_to_queue = amqp_bytes_malloc_dup(r->queue);
-      if (reply_to_queue.bytes == NULL) {
-        syslog(LOG_ERR, "Out of memory while copying queue name");
-        return -1;
-      }
-      
-      amqp_queue_bind(conn, 1, reply_to_queue, amqp_cstring_bytes(exchange), 
-		      amqp_cstring_bytes(sf->sf_queue), amqp_empty_table);
-      amqp_get_rpc_reply(conn);
-      queue_declared = 1;
-      amqp_bytes_free(reply_to_queue);
-    }
-  }
   struct utsname uts_buf;
   uname(&uts_buf);
 
