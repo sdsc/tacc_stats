@@ -25,6 +25,8 @@ double current_time;
 char current_jobid[80] = "-";
 char new_jobid[80] = "-";
 int nr_cpus;
+int n_pmcs = 0;
+processor_t processor = 0;
 
 static volatile sig_atomic_t g_new_flag = 1;
 
@@ -108,7 +110,7 @@ int main(int argc, char *argv[])
 
   /* Our process ID and Session ID */
   pid_t pid, sid;
-  
+
   /* Fork off the parent process */
   pid = fork();
   if (pid < 0) {
@@ -130,7 +132,7 @@ int main(int argc, char *argv[])
     /* Log the failure */
     exit(EXIT_FAILURE);
   }
-
+  
   // This block will force begin to wait until initialization is complete
   sigset_t mask;
   sigemptyset(&mask);
@@ -203,6 +205,7 @@ int main(int argc, char *argv[])
   } cmd;
 
   nr_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+  processor = signature(&n_pmcs);
 
   /* Close out the standard file descriptors */
   close(STDIN_FILENO);
@@ -243,7 +246,7 @@ int main(int argc, char *argv[])
     goto out;
   }
   char *dash = "-\n";
-  if (fwrite(dash, sizeof(char), sizeof(dash), jobfd) < 2) {
+  if (fwrite(dash, sizeof(char), 2, jobfd) < 2) {
     ERROR("cannot write to %s: %m\n", JOBID_FILE_PATH);
     goto out;
   }
@@ -268,7 +271,7 @@ int main(int argc, char *argv[])
   ///////////////////////
   // START OF MAIN LOOP//
   ///////////////////////
-  struct timespec timeout = {.tv_sec = frequency, .tv_nsec = 0};    
+  struct timespec timeout = {.tv_sec = (time_t)3600, .tv_nsec = 0};    
   fd_set descriptors;
   while(1) {
     // Block rotate until sample is complete
@@ -303,10 +306,14 @@ int main(int argc, char *argv[])
 	syslog(LOG_INFO, "Loading jobid %s from %s\n", new_jobid, JOBID_FILE_PATH);	
 	stats_buffer_mark(&sf, "begin %s", new_jobid);
 	strcpy(current_jobid, new_jobid);
+	timeout.tv_sec = frequency; 
+	timeout.tv_nsec = 0;    
       }
       else {
 	syslog(LOG_INFO, "Unloading jobid %s from %s\n", current_jobid, JOBID_FILE_PATH);	
 	stats_buffer_mark(&sf, "end %s", current_jobid);
+	timeout.tv_sec = 3600; 
+	timeout.tv_nsec = 0;    
       }
       cmd = cmd_reset;
     }

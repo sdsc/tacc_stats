@@ -1,5 +1,22 @@
 {% extends "tacc_stats_site/base.html" %}
 {% block content %}
+
+<script type="text/javascript" src="http://code.jquery.com/jquery-2.1.4.min.js"></script>
+<script src="//cdn.jsdelivr.net/webshim/1.14.5/polyfiller.js"></script>
+<script>
+webshims.setOptions('forms-ext', {types: 'date'});
+webshims.polyfill('forms forms-ext');
+$.webshims.formcfg = {
+en: {
+    dFormat: '-',
+    dateSigns: '-',
+    patterns: {
+        d: "yy-mm-dd"
+    }
+}
+};
+</script>
+
 <div class="row">
   <div class="col-md-offset-3 col-md-4">
     <center>   
@@ -40,11 +57,15 @@
 </div>
 <div class="row">
     <div class="col-md-2"><label for="uid">Project</label></div>
-    <div class="col-md-2"><input type="text" class="form-control input-sm" name="project"></div>
+    <div class="col-md-2"><input type="text" class="form-control input-sm" name="project__icontains"></div>
 </div>
 <div class="row">
     <div class="col-md-2"><label for="uid">Executable</label></div>
     <div class="col-md-2"><input type="text" class="form-control input-sm" name="exe__icontains"></div>
+</div>
+<div class="row">
+    <div class="col-md-2"><label for="uid">Process</label></div>
+    <div class="col-md-2"><input type="text" class="form-control input-sm" name="proc__name__icontains"></div>
 </div>
 <div class="row">
     <div class="col-md-2"><label for="uid">Queue</label></div>
@@ -75,6 +96,18 @@
 </div>
 <hr>
 
+<div class="table-responsive">
+  <table class="table table-condensed table-bordered" style="max-width=75%">
+    <thead><font size="5" color="#002868">Top 10 Lustre jobs in past 5 days: JobID(Open/Close IOPS)</font></thead>
+    {% for key,values in md_job_list.items %}
+    <tr><td><a href="{% url 'machine:user_view' key %}"> {{ key }}</a> </td>
+      {% for v,d in values %} 
+      <td><a href="{% url 'machine:job' v %}">{{ v }}</a>({{ d|stringformat:"0.1f" }})</td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </table>
+</div>
 
 <div class="container-fluid">
 

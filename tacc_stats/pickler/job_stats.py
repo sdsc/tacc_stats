@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import datetime, errno, glob, numpy, os, sys, time, gzip
-import amd64_pmc, intel_process
+from tacc_stats.pickler import amd64_pmc, intel_process
 import re
 import string
 
@@ -213,7 +213,7 @@ class Host(object):
     def __init__(self, job, name, raw_stats_dir, name_ext = ''):
         self.job = job
         self.name = name
-        self.name_ext=name_ext
+        self.name_ext = name_ext
         self.times = []
         self.marks = {}
         self.raw_stats = {}
@@ -239,35 +239,33 @@ class Host(object):
                 if re.match('^[0-9]{4}[0-1][0-9][0-3][0-9]$', base):
                     base = (datetime.datetime.strptime(base,"%Y%m%d") - datetime.datetime(1970,1,1)).total_seconds()
                 # Prune to files that might overlap with job.
-                ent_start = long(base)
-                ent_end = ent_start + 2*RAW_STATS_TIME_MAX
-                if ((ent_start <= job_start) and (job_start <= ent_end)) or ((ent_start <= job_end) and (job_end <= ent_end)) or (max(job_start, ent_start) <= min(job_end, ent_end)) :
+                ent_start = int(base) - 3*RAW_STATS_TIME_MAX
+                ent_end   = int(base) + 2*RAW_STATS_TIME_MAX
+
+                if (max(job_start, ent_start) <= min(job_end, ent_end)):
                     full_path = os.path.join(raw_host_stats_dir, ent)
                     path_list.append((full_path, ent_start))
                     self.trace("path `%s', start %d\n", full_path, ent_start)
         except Exception as e:
-            print e
+            print(e)
             pass
         path_list.sort(key=lambda tup: tup[1])
         return path_list
 
-    def read_stats_file_header(self, file):
+    def read_stats_file_header(self, lines):
         file_schemas = {}
 
-        for line in file:
+        for line in lines:
             try:
                 c = line[0]
                 if c == SF_SCHEMA_CHAR:
                     type_name, schema_desc = line[1:].split(None, 1)
-                    if type_name == "intel_hsw_ht": type_name = "intel_hsw"
-                    if type_name == "intel_hsw_cbo_ht": type_name = "intel_hsw_cbo"
-
                     schema = self.job.get_schema(type_name, schema_desc)
                     if schema:
                         file_schemas[type_name] = schema
                     else:
-                        self.error("file `%s', type `%s', schema mismatch desc\n%s\n",
-                                   file.name, type_name, schema_desc)
+                        self.error("type `%s', schema mismatch desc\n%s\n",
+                                   type_name, schema_desc)
                 elif c == SF_PROPERTY_CHAR:
                     pass
                 elif c == SF_COMMENT_CHAR:
@@ -275,128 +273,70 @@ class Host(object):
                 else:
                     break
             except Exception as exc:
-                self.trace("file `%s', caught `%s' discarding line `%s'\n",
-                           file.name, exc, line)
+                self.trace("caught `%s' discarding line `%s'\n",
+                           exc, line)
                 break
         return file_schemas
 
-    def parse_stats(self, rec_time, line, file_schemas, file):
-        type_name, dev_name, rest = line.split(None, 2)
-        if type_name == "intel_hsw_ht": type_name = "intel_hsw"
-        if type_name == "intel_hsw_cbo_ht": type_name = "intel_hsw_cbo"
+    def parse_stats(self, rec_time, line, file_schemas, fd):
+        try:
+            type_name, dev_name, rest = line.split(None, 2)
+        except: return
         schema = file_schemas.get(type_name)
         if not schema:
             self.error("file `%s', unknown type `%s', discarding line `%s'\n",
-                       file.name, type_name, line)
+                       fd.name, type_name, line)
             return
         # TODO stats_dtype = numpy.uint64
         # XXX count = ?
-        vals = numpy.fromstring(rest, dtype=numpy.uint64, sep=' ')
+        try:
+            vals = numpy.fromstring(rest, dtype=numpy.uint64, sep=' ')
+        except: 
+            return
         if vals.shape[0] != len(schema):
             self.error("file `%s', type `%s', expected %d values, read %d, discarding line `%s'\n",
-                       file.name, type_name, len(schema), vals.shape[0], line)
+                       fd.name, type_name, len(schema), vals.shape[0], line)
             return
         type_stats = self.raw_stats.setdefault(type_name, {})
         dev_stats = type_stats.setdefault(dev_name, [])
         dev_stats.append((rec_time, vals))
 
-    def read_stats_file(self, file):
-        file_schemas = self.read_stats_file_header(file)
+    def read_stats_file(self, fd):
+        lines = fd.readlines()
+        begin_idx = None
+        for line in lines:    
+            if line[0].isdigit():
+                str_time, str_jobid, str_hostname = line.split()
+                if str(self.job.id) in set(str_jobid.split(',')):
+                    begin_idx = lines.index(line)
+                    break
+
+        if not begin_idx: 
+            return
+
+        file_schemas = self.read_stats_file_header(lines)
         if not file_schemas:
-            self.trace("file `%s' bad header\n", file.name)
+            self.trace("file `%s' bad header\n", fd.name)
             return
-        rec_jobid = set()
-        # Scan file for records belonging to JOBID.
-        for line in file:
-            try:
-                c = line[0]
-                if c.isdigit():
-                    try:
-                        str_time,str_jobid,hostname = line.split()
-                    except:
-                        str_time, str_jobid = line.split()
 
-                    rec_time = float(str_time)
-                    rec_jobid = set(str_jobid.split(','))
-                    if self.job.id in rec_jobid:
-                        self.trace("file `%s' rec_time %d, rec_jobid `%s'\n",
-                                   file.name, rec_time, rec_jobid)
-                        self.times.append(rec_time)
-                        break
-                elif line.startswith('%begin'):
-                    rec_jobid.add(line.split()[2])
-                    if self.job.id in rec_jobid:
-                        self.times.append(rec_time)
-                        mark = line[1:].strip()
-                        self.marks[mark] = True
-                        break
-            except Exception as exc:
-                self.trace("file `%s', caught `%s', discarding `%s'\n",
-                           file.name, str(exc), line)
-                stats_file_discard_record(file)
-        else:
-            # We got to the end of this file wthout finding any
-            # records belonging to JOBID.  Try next path.
-            self.trace("file `%s' has no records belonging to job\n", file.name)
-            return
-        # OK, we found a record belonging to JOBID.
-        skip = False
-        for line in file:
-            try:
-                c = line[0]
-                if c.isdigit():
-                    skip = False
-
-                    try:
-                        str_time,str_jobid,hostname = line.split()
-                    except:
-                        str_time, str_jobid = line.split()
-
-                    rec_time = float(str_time)
-                    rec_jobid = set(str_jobid.split(','))
-
-                    if self.job.id not in rec_jobid:
-                        line = file.next()
-                        if line.startswith(SF_MARK_CHAR): 
-                            tokens = line[1:].strip().split(" ")
-                            if len(tokens) > 1 and tokens[0].strip() == "end":
-                                rec_jobid.add( tokens[1].strip() )
-                            else:
-                                self.trace("file '%s' syntax error '%s'\n", file.name, line)
-                        if self.job.id not in rec_jobid:
-                            return
-                    self.trace("file `%s' rec_time %d, rec_jobid `%s'\n",
-                               file.name, rec_time, rec_jobid)
-                    self.times.append(rec_time)
-                elif c.isalpha():
-                    if False == skip:
-                        self.parse_stats(rec_time, line, file_schemas, file)            
-                elif c == SF_MARK_CHAR:
-                    mark = line[1:].strip()
-                    actions = mark.split()
-                    if actions[1].strip() != self.job.id:
-                        self.times.pop()
-                        skip = True
-                    else:
-                        if actions[0] == "begin" and len(self.times) > 1:
-                            # this is a 'begin' record for this job, but have already processed a record
-                            # for this job. This race condition occurs if the job starts very close to the
-                            # normal cron-initiated record.  Tacc_stats resets some performance counters on
-                            # a begin, so it is necessary to discard the records before this one.
-                            self.job.errors.add("BEGIN_IN_MIDDLE {} {} {} discard {} previous".format(self.name, file.name, rec_time, len(self.times)-1 ) )
-                            self.raw_stats = {}
-                            self.times = [ rec_time ]
-
-                        skip = False
-                    self.marks[mark] = True
-                #elif c == SF_COMMENT_CHAR:
-                    #pass        
+        record = False
+        for line in lines[begin_idx:]:            
+            if line[0].isdigit():
+                str_time,str_jobids,hostname = line.split()
+                if str(self.job.id) in set(str_jobids.split(',')):
+                    self.times += [float(str_time)]
+                    record = True
                 else:
-                    pass #...
-            except Exception as exc:
-                self.trace("file `%s', caught `%s', discarding `%s'\n",
-                           file.name, str(exc), line)
-                stats_file_discard_record(file)
+                    record = False
+            elif record and line[0].isalpha():
+                self.parse_stats(float(str_time), line, file_schemas, fd)                            
+            elif line.startswith("%begin") or line.startswith("%end"):
+                str_jobid = line.split()[1]
+                if str(self.job.id) == str_jobid:
+                    self.marks[line[1:].strip()] = True
+                    record = True
+                else:
+                    record = False
 
     def gather_stats(self):
         path_list = self.get_stats_paths()
@@ -408,15 +348,16 @@ class Host(object):
         # into lists of tuples in self.raw_stats.  The lists will be
         # converted into numpy arrays below.
         for path, start_time in path_list:
+            #try:
+            #    with gzip.open(path, "r") as fd:
+            #        self.read_stats_file(fd)
+            #except IOError as ioe:
             try:
-                with gzip.open(path) as file:
-                    self.read_stats_file(file)
-            except IOError as ioe:
-                with open(path) as file:
-                    self.read_stats_file(file)
-            except IOError as ioe:
+                with open(path, "r") as fd:
+                    self.read_stats_file(fd)
+            except:
                 self.error("read error for file %s\n", path)
-
+                
         begin_mark = 'begin %s' % self.job.id # No '%'.
         if not begin_mark in self.marks:
             self.error("no begin mark found\n")
@@ -425,6 +366,7 @@ class Host(object):
         if not end_mark in self.marks:
             self.error("no end mark found\n")
             return False
+
         return self.raw_stats
 
     def get_stats(self, type_name, dev_name, key_name):
@@ -463,9 +405,6 @@ class Job(object):
         error('%s: ' + fmt, self.id, *args)
 
     def get_schema(self, type_name, desc=None):
-        if type_name == "intel_hsw_ht": type_name = "intel_hsw"
-        if type_name == "intel_hsw_cbo_ht": type_name = "intel_hsw_cbo"
-
         schema = self.schemas.get(type_name)
         if schema:
             if desc and schema.desc != schema_fixup(type_name,desc):
@@ -497,10 +436,10 @@ class Job(object):
                 self.error("no host list found\n")
                 return False
             try:
-                with open(path) as file:
+                with open(path, "rb") as file:
                     host_list = [host for line in file for host in line.split()]
-            except IOError as (err, str):
-                self.error("cannot open host list `%s': %s\n", path, str)
+            except OSError as e:
+                self.error("cannot open host list `%s': %s\n", path, e)
                 return False
         if len(host_list) == 0:
             self.error("empty host list\n")
@@ -519,21 +458,24 @@ class Job(object):
                 host = Host(self, host_name, self.stats_home)
             if host.gather_stats():
                 self.hosts[host_name] = host
-            else: break
+            else: pass
+
         if not self.hosts:
             self.error("no good hosts\n")
             return False
         return True
 
     def munge_times(self):
+
         times_lis = []
-        for host in self.hosts.itervalues():
+
+        for host in self.hosts.values():
             times_lis.append(host.times)
             del host.times
 
         times_lis.sort(key=lambda lis: len(lis))
         # Choose times to have median length.
-        times = list(times_lis[len(times_lis) / 2])
+        times = list(times_lis[len(times_lis) // 2])
         if not times:
             return False
         times.sort()
@@ -563,7 +505,11 @@ class Job(object):
         # numpy array of values.
         m = len(self.times)
         n = len(schema)
-        A = numpy.zeros((m, n), dtype=numpy.uint64) # Output.
+        try:
+            A = numpy.zeros((m, n), dtype=numpy.uint64) # Output.
+        except MemoryError as e:
+            error("cannot allocate A %s\n", e)
+            return None
         # First and last of A are first and last from raw.
         A[0] = raw[0][1]
         A[m - 1] = raw[-1][1]
@@ -584,7 +530,7 @@ class Job(object):
 
         # OK, we fit the raw values into A.  Now fixup rollover and
         # convert units.
-        for e in schema.itervalues():
+        for e in schema.values():
             j = e.index
             if e.is_event:
                 p = r = A[0, j] # Previous raw, rollover/baseline.
@@ -596,12 +542,16 @@ class Job(object):
                         # Rebase narrow counters and spurious resets.
                         # 64-bit overflows are correctly handled automatically                        
                         fudged = False
-                        if 'intel_' in type_name: 
-                            r = numpy.uint(0) - A[i-1,j]
-                        elif e.width:
+                        #if 'intel_' in type_name: 
+                        #    r = numpy.uint(0) - A[i-1,j]
+                        if e.width:
                             trace("time %d, counter `%s', rollover prev %d, curr %d\n",
                                   self.times[i], e.key, p, v)
-                            r -= numpy.uint64(1L << e.width)
+                            a = 1.0
+                            if type_name == 'intel_rapl':
+                                a = 0.06104
+                            r -= numpy.uint64(1 << e.width)*a
+
                         elif v == 0 or (type_name == 'ib_ext' or type_name == 'ib_sw') or \
                                 (type_name == 'cpu' and e.key == 'iowait'):
                             # We will assume a spurious reset, 
@@ -627,6 +577,10 @@ class Job(object):
             if e.mult:
                 for i in range(0, m):
                     A[i, j] *= e.mult
+            if "MSR_DRAM_ENERGY_STATUS" == schema.keys()[j]: 
+                for i in range(0, m):
+                    A[i, j] *= 0.0153/0.06104
+
         return A
 
     def logoverflow(self, host_name, type_name, dev_name, key_name):
@@ -640,19 +594,22 @@ class Job(object):
         self.overflows[type_name][dev_name][key_name].append(host_name)
 
     def process_stats(self):
-        for host in self.hosts.itervalues():
+        for host in self.hosts.values():
             host.stats = {}
-            for type_name, raw_type_stats in host.raw_stats.iteritems():
+            for type_name, raw_type_stats in host.raw_stats.items():
                 stats = host.stats[type_name] = {}
                 schema = self.schemas[type_name]
-                for dev_name, raw_dev_stats in raw_type_stats.iteritems():
-                    stats[dev_name] = self.process_dev_stats(host, type_name, schema,
-                                                             dev_name, raw_dev_stats)
+                for dev_name, raw_dev_stats in raw_type_stats.items():
+                    try:
+                        stats[dev_name] = self.process_dev_stats(host, type_name, schema,
+                                                                 dev_name, raw_dev_stats)
+                    except:
+                        continue
             del host.raw_stats
         amd64_pmc.process_job(self)
         intel_process.process_job(self)
         # Clear mult, width from schemas. XXX
-        for schema in self.schemas.itervalues():
+        for schema in self.schemas.values():
             for e in schema.itervalues():
                 e.width = None
                 e.mult = None
@@ -672,7 +629,7 @@ class Job(object):
         if host_names:
             host_list = [self.hosts[name] for name in host_names]
         else:
-            host_list = self.hosts.itervalues()
+            host_list = self.hosts.values()
         for host in host_list:
             type_stats = host.stats.get(type_name)
             if not type_stats:
@@ -681,7 +638,7 @@ class Job(object):
             if dev_names:
                 dev_list = [type_stats[name] for name in dev_names]
             else:
-                dev_list = type_stats.itervalues()
+                dev_list = type_stats.values()
             for dev_stats in dev_list:
                 A += dev_stats
                 nr_devs += 1
@@ -695,7 +652,7 @@ class Job(object):
         schema = self.get_schema(type_name)
         index = schema[key_name].index
         host_stats = {}
-        for host_name, host in self.hosts.iteritems():
+        for host_name, host in self.hosts.items():
             host_stats[host_name] = host.stats[type_name][dev_name][:, index]
         return host_stats
 

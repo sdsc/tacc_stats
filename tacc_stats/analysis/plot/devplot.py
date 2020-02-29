@@ -1,37 +1,55 @@
-from plots import Plot
-from matplotlib.figure import Figure
-class DevPlot(Plot):
+import sys
+from tacc_stats.analysis.gen import utils
 
-  def __init__(self,k1={'intel_snb' : ['intel_snb','intel_snb','intel_snb']},k2={'intel_snb':['LOAD_1D_ALL','INSTRUCTIONS_RETIRED','LOAD_OPS_ALL']},processes=1,**kwargs):
-    self.k1 = k1
-    self.k2 = k2
-    super(DevPlot,self).__init__(processes=processes,**kwargs)
+from bokeh.palettes import d3
+from bokeh.layouts import gridplot
+from bokeh.models import HoverTool, ColumnDataSource, Plot, Grid, DataRange1d, LinearAxis
+from bokeh.models.glyphs import Step
+import numpy 
 
-  def plot(self,jobid,job_data=None):
-    self.setup(jobid,job_data=job_data)
-    cpu_name = self.ts.pmc_type
-    type_name=self.k1[cpu_name][0]
-    events = self.k2[cpu_name]
+class DevPlot():
 
-    ts=self.ts
+  def add_axes(self, plot, label):
+    xaxis = LinearAxis()
+    yaxis = LinearAxis()      
+    yaxis.axis_label = label
+    plot.add_layout(xaxis, 'below')        
+    plot.add_layout(yaxis, 'left')
+    plot.add_layout(Grid(dimension=0, ticker=xaxis.ticker))
+    plot.add_layout(Grid(dimension=1, ticker=yaxis.ticker))
+    return plot
 
-    n_events = len(events)
-    self.fig = Figure(figsize=(8,n_events*2+3),dpi=110)
+  def plot(self, job, typename):
+    u = utils.utils(job)
 
-    do_rate = True
-    scale = 1.0
-    if type_name == 'mem': 
-      do_rate = False
-      scale=2.0**10
-    if type_name == 'cpu':
-      scale=ts.wayness*100.0
+    colors = d3["Category20"][20]
 
-    for i in range(n_events):
-      self.ax = self.fig.add_subplot(n_events,1,i+1)
-      self.plot_lines(self.ax, [i], xscale=3600., yscale=scale, do_rate = do_rate)
-      self.ax.set_ylabel(events[i],size='small')
-    self.ax.set_xlabel("Time (hr)")
-    self.fig.subplots_adjust(hspace=0.5)
-    self.fig.tight_layout()
+    hc = {}
+    for i, hostname in enumerate(u.hostnames):
+      hc[hostname] = colors[i%20]
+    
+    plots = []
 
-    self.output('devices')
+    schema, _stats  = u.get_type(typename)
+    # Plot this type of data
+    for index, event in enumerate(schema):
+      try:
+        plot = Plot(plot_width=400, plot_height=150, 
+                    x_range = DataRange1d(), y_range = DataRange1d())                  
+        for hostname, stats in _stats.items():               
+          rate = stats[:, index]
+          if typename == "mem" or typename == "proc":
+            source = ColumnDataSource({"x" : u.hours, "y" : rate})
+            plot.add_glyph(source, Step(x = "x", y = "y", mode = "after", 
+                                        line_color = hc[hostname]))
+          else: 
+            rate = numpy.diff(rate)/numpy.diff(job.times)
+            source = ColumnDataSource({"x" : u.hours, "y" : numpy.append(rate, rate[-1])})
+            plot.add_glyph(source, Step(x = "x", y = "y", mode = "after", 
+                                        line_color = hc[hostname]))
+        if "FP_ARITH_INST_RETIRED" in event: event = event.split("FP_ARITH_INST_RETIRED_")[1]
+        plots += [self.add_axes(plot, event)]
+      except:
+        print(event + ' plot failed for jobid ' + job.id )
+        print(sys.exc_info())
+    return gridplot(plots, ncols = len(plots)//4 + 1)

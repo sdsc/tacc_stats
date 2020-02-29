@@ -21,7 +21,6 @@ DATABASES = {
         }
     }
 
-print '>>>>>>>>>>>>', DATABASES
 
 # Hosts/domain names that are valid for this site; required if DEBUG is False
 # See https://docs.djangoproject.com/en/1.5/ref/settings/#allowed-hosts
@@ -57,7 +56,7 @@ MEDIA_ROOT = os.path.join(DIR,'media/')
 # URL that handles the media served from MEDIA_ROOT. Make sure to use a
 # trailing slash.
 # Examples: "http://example.com/media/", "http://media.example.com/"
-MEDIA_URL = 'media/'
+MEDIA_URL = '/media/'
 
 # Absolute path to the directory static files should be collected to.
 # Don't put anything in this directory yourself; store your static files
@@ -96,8 +95,9 @@ TEMPLATES = [
             'context_processors': [
                 # Insert your TEMPLATE_CONTEXT_PROCESSORS here or use this
                 # list if you haven't customized them:
-                'django.contrib.auth.context_processors.auth',
                 'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
                 'django.template.context_processors.i18n',
                 'django.template.context_processors.media',
                 'django.template.context_processors.static',
@@ -108,14 +108,14 @@ TEMPLATES = [
     },
 ]
 
-MIDDLEWARE_CLASSES = (
+MIDDLEWARE = (
     'django.middleware.common.CommonMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
-    #'django.middleware.cache.UpdateCacheMiddleware',
-    #'django.middleware.cache.FetchFromCacheMiddleware',
+    'django.middleware.cache.UpdateCacheMiddleware',
+    'django.middleware.cache.FetchFromCacheMiddleware',
 )
 
 ROOT_URLCONF = 'tacc_stats.site.tacc_stats_site.urls'
@@ -144,40 +144,82 @@ INTERNAL_IPS = ['127.0.0.1']
 SESSION_SERIALIZER = 'django.contrib.sessions.serializers.JSONSerializer'
 SESSION_ENGINE = 'django.contrib.sessions.backends.file'
 
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'filters': {
-        'require_debug_false': {
-            '()': 'django.utils.log.RequireDebugFalse'
-        }
-    },
-    'handlers': {
-        'mail_admins': {
-            'level': 'ERROR',
-            'filters': ['require_debug_false'],
-            'class': 'django.utils.log.AdminEmailHandler'
-        }
-    },
-    'loggers': {
-        'django.request': {
-            'handlers': ['mail_admins'],
-            'level': 'ERROR',
-            'propagate': True,
-        },
-    }
-}
-"""
 CACHES = {
     'normal': {
         'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
         'LOCATION': '127.0.0.1:11211',
         },
-
-    'default': { 
-        'BACKEND':'tacc_stats.site.tacc_stats_site.cache.LargeMemcachedCache',
+    'default': {
+        'BACKEND': 'tacc_stats.site.tacc_stats_site.cache.LargeMemcachedCache',
         'LOCATION': '127.0.0.1:11211',
-        'TIMEOUT': None,
-        }
-    }
-"""
+        'TIMEOUT' : None,
+        },
+}
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'default': {
+            'format': '[DJANGO] %(levelname)s %(asctime)s %(module)s '
+                      '%(name)s.%(funcName)s:%(lineno)s: %(message)s'
+        },
+        'agave': {
+            'format': '[AGAVE] %(levelname)s %(asctime)s %(module)s '
+                      '%(name)s.%(funcName)s:%(lineno)s: %(message)s'
+        },
+        'metrics': {
+            'format': '[METRICS] %(levelname)s %(module)s %(name)s.%(funcName)s:%(lineno)s:'
+                      ' %(message)s user=%(user)s sessionId=%(sessionId)s op=%(operation)s'
+                      ' info=%(info)s'
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
+            'formatter': 'default',
+        },
+        'opbeat': {
+            'level': 'ERROR',
+            'class': 'logging.StreamHandler',
+        },
+        'metrics': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+            'formatter': 'metrics',
+        },
+        'logfile': {
+            'level':'INFO',
+            'class':'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join('/stats', 'tacc_stats_site.log'),
+            'maxBytes': 1024*1024*15, # 15MB
+            'backupCount': 10,
+        },
+
+    },
+    'loggers': {
+        'tacc_stats_site': {
+            'handlers': ['logfile',],
+            'level': 'INFO',
+        },
+        'django': {
+            'handlers': ['console', 'opbeat'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'celery': {
+            'handlers': ['console', 'opbeat'],
+            'level': 'DEBUG',
+            'propagate': True
+        },
+        'opbeat': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
+        'metrics': {
+            'handlers': ['metrics'],
+            'level': 'INFO',
+        },
+    },
+}

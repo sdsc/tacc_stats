@@ -1,6 +1,8 @@
 tacc_stats Documentation               {#mainpage}
 ========================
 
+[![DOI](https://zenodo.org/badge/21212519.svg)](https://zenodo.org/badge/latestdoi/21212519)
+
 Developers and Maintainers
 -------
 R. Todd Evans  (<mailto:rtevans@tacc.utexas.edu>)
@@ -38,7 +40,7 @@ First ensure the RabbitMQ library and header file are installed on the build and
 
 [librabbitmq-devel-0.5.2-1.el6.x86_64](ftp://fr2.rpmfind.net/linux/epel/6/x86_64/librabbitmq-devel-0.5.2-1.el6.x86_64.rpm)
 
-`./configure --enable-rabbitmq; make; make install` will then successfully build the `tacc_stats` executable for many systems.  If Xeon Phi coprocessors are present on your system they can be monitored with the `--enable-mic` flag.  Additionally the configuration options, `--disable-infiniband`, `--disable-lustre`, `--disable-hardware` will disable infiniband, Lustre Filesystem, and Hardware Counter monitoring.  Not enabling RabbitMQ will result in a legacy build of `tacc_stats` that relies on the shared filesystem to transmit data.  This mode is not recommended.  If libraries or header files are not found than add their paths to the include and library paths with the `CPPFLAGS` and/or `LDFLAGS` vars as usual.  
+`./configure --enable-rabbitmq; make; make install` will then successfully build the `tacc_stats` executable for many systems.  If Xeon Phi coprocessors are present on your system they can be monitored with the `--enable-mic` flag.  Additionally the configuration options, `--disable-infiniband`, `--disable-lustre`, `--disable-hardware` will disable infiniband, Lustre Filesystem, and Hardware Counter monitoring which are all enabled by default.  Not enabling RabbitMQ will result in a legacy build of `tacc_stats` that relies on the shared filesystem to transmit data.  This mode is not recommended.  If libraries or header files are not found than add their paths to the include and library paths with the `CPPFLAGS` and/or `LDFLAGS` vars as is standard in autoconf based installations.  
 
 There will be a configuration file, `/etc/tacc_stats.conf`, after installation.  This file contains the fields
 
@@ -53,15 +55,15 @@ There will be a configuration file, `/etc/tacc_stats.conf`, after installation. 
 
 `SERVER` should be set to the RabbitMQ server, `QUEUE` to the system name, `PORT` to the RabbitMQ port (5672 should be ok), and `FREQ` to the desired sampling frequency in seconds.
 
-An RPM can be built for subpackage deployment using  the `tacc_statsd.spec` file.  The most straightforward approach to build this
-is to setup your rpmbuild directory then
+An RPM can be built for subpackage deployment using  the `tacc_statsd_systemv.spec` file.  The most straightforward approach to build this is to setup your rpmbuild directory then run
 
-`rpmbuild -ba tacc_statsd.spec --define 'rmqserver rabbitmqservername' --define 'system systemname'`
+`rpmbuild -ba tacc_statsd_systemv.spec --define 'rmqserver rabbitmqservername' --define 'system systemname'`
 
-where the `rmqserver` will be the RabbitMQ `SERVER` hostname and `system` will be the `QUEUE` in `tacc_stats.conf`. 
+where the `rmqserver` will be the RabbitMQ `SERVER` hostname and `system` will be the RabbitMQ `QUEUE` the data is sent to. 
+Configuration options may have to be changed within the `tacc_statsd_systemv.spec` file.
 
-After installation the executable `/opt/tacc_statsd/tacc_stats`, service `/etc/init.d/taccstats`, and config file `/etc/tacc_stats.conf` should exist.  If the rpm was used for installation `tacc_stats` will be `chkconfig`'d to start at boot time and be running.
-`tacc_stats` can be started, stopped, and restarted using `taccstats start`, `taccstats stop`, and `taccstats restart`.
+After installation the executable `/opt/tacc_statsd/tacc_stats` and SystemV service file `/etc/systemd/system/taccstats.service`, should exist.  If the rpm was used for installation `taccstats` will be `enable`'d to start at boot time and be restart within 10 seconds if it fails for any reason.
+`tacc_stats` can be started, stopped, and restarted using `systemctl start taccstats`, `systemctl stop taccstats`, and `systemctl restart taccstats`.
 
 In order to notify `tacc_stats` of a job beginning echo the job id into `/var/run/TACC_jobid`.  It order to notify
 it of a job ending echo `-` into `/var/run/TACC_jobid`.  This can be accomplished in the job scheduler prolog and
@@ -80,35 +82,31 @@ and
 `echo - > jobid_file`
 
 To perform the pickling of this data it is also necessary to
-generate an accounting file that contains at least the JOBID and time range
-that the job ran.  The pickling will currently work without modification on
-SGE job schedulers.  It will also work on any accounting file with the format
+generate an accounting file that contains the following information
+in the following format
 
-`Job ID ($JOBID) : User ID ($UID) : Project ID ($ACCOUNT) : Junk ($BATCH) : Start time ($START) : End time ($END) : Time job entered in queue ($SUBMIT) : SLURM partition ($PARTITION) : Requested Time ($LIMIT) : Job name ($JOBNAME) : Job completion status ($JOBSTATE) : Nodes ($NODECNT) : Cores ($PROCS)`
+`JobID|User|Account|Start|End|Submit|Partition|Timelimit|JobName|State|NNodes|ReqCPUS|NodeList`
 
-for each record using the SLURM interface (set by the `batch_system` field in the site-specific configuration file).  In addition to the accounting file, a directory of host-file logs (hosts belonging to a particular job) must be
-generated. The host file directories should have the form
+for example,
 
-`/year/month/day/hostlist.JOBID`
+1837137|rtevans|project140208|2018-08-01T18:18:51|2018-08-02T11:44:51|2018-07-29T08:05:43|normal|1-00:00:00|jobname|COMPLETED|8|104|c420-[024,073],c421-[051-052,063-064,092-093]
 
-with hostlist.JOBID listing the hosts allocated to the job in a single column.
-
-The accounting file and host-file logs will be used to map JOBID's to
-time and node ranges so that the job-level data can be extracted from the
-raw data efficiently.
+If using SLURM the `sacct_gen.py` script that will be installed with the `tacc_stats` subpackage may be used. 
+This script generates a file for each date with the name format `year-month-day.txt`, e.g. `2018-11-01.txt`.
 
 #### `tacc_stats` subpackage
  To install TACC Stats on the machine where data will be processed, analyzed, and the webserver hosted follow these
  steps:
  
-1.  Download the package and setup the Python virtual environment.
+1.  Download the package and setup the Python3 virtual environment. TACC Stats is Python3 dependent.
 ```
 $ virtualenv machinename --system-site-packages
 $ cd machinename; source bin/activate
 $ git clone https://github.com/TACC/tacc_stats
 ```
 `tacc_stats` is a pure Python package.  Dependencies should be automatically downloaded
-and installed when installed via `pip`.  The package must first be configured however.  
+and installed when installed via `pip`.  The package must first be configured however 
+in the `tacc_stats.ini` file.  
 2.  The initialization file, `tacc_stats.ini`, controls all the configuration options and has 
 the following content and descriptions
 ```
@@ -130,18 +128,16 @@ rmq_queue       = %(machine)s
 
 ## Configuration for Web Portal Support
 [PORTAL]
-acct_path       = %(data_dir)s/accounting/tacc_jobs_completed
-host_list_dir   = %(data_dir)s/hostfile_logs
+acct_path       = %(data_dir)s/accounting
 pickles_dir     = %(data_dir)s/pickles
 archive_dir     = %(data_dir)s/archive
 host_name_ext   = %(machine)s.tacc.utexas.edu
 batch_system    = SLURM
 ```
-Set these paths as needed.  The raw stats data will be stored in the `archive_dir` and processed stats data in the `pickles_dir`.  `machine` should match the system name used in the RabbitMQ server `QUEUE` field.  This is the only field that needs to match 
-anything in the `monitor` subpackage.
+Set these paths as needed. The `accounting_path` will contain an accounting file for each date, e.g. `2018-11-01.txt`. The raw stats data will be stored in the `archive_dir` and processed stats data in the `pickles_dir`.  `machine` should match the system name used in the RabbitMQ server `QUEUE` field and is the RabbitMQ `QUEUE` that the monitoring agent sends the data too.  This is the only field that needs to match settings in the `monitor` subpackage. `host_name_ext` is the extension required to each compute node hostname in order to build a FQDN. This will match to directory names created in the `archive_dir`. 
 3.  Install `tacc_stats`
 ```
-$ pip install tacc_stats/
+$ pip install -e tacc_stats/
 ```
 4.  Start the RabbitMQ server reader in the background, e.g. 
 ```
@@ -158,6 +154,7 @@ $ psql
 # ALTER ROLE taccstats SET client_encoding TO 'utf8';
 # ALTER ROLE taccstats SET default_transaction_isolation TO 'read committed';
 # ALTER ROLE taccstats SET timezone TO 'UTC';
+# ALTER DATABASE machinename_db OWNER TO taccstats;
 # GRANT ALL PRIVILEGES ON DATABASE machinename_db TO taccstats;
 # \q
 ```
@@ -177,17 +174,21 @@ cron file
 7.  Next configure the Apache server (make sure it is installed and the `mod_wsgi` Apache module is installed)
 A sample configuration file, `/etc/httpd/conf.d/ls5.conf`, looks like
 ```
-LoadModule wsgi_module modules/mod_wsgi.so
+LoadModule wsgi_module /stats/stampede2/lib/python3.7/site-packages/mod_wsgi/server/mod_wsgi-py37.cpython-37m-x86_64-linux-gnu.so
 WSGISocketPrefix run/wsgi
+
 <VirtualHost *:80>
+
 ServerAdmin rtevans@tacc.utexas.edu
-ServerName tacc-stats02.tacc.utexas.edu
-ServerAlias ls5-stats.tacc.utexas.edu
-WSGIDaemonProcess ls5 python-path=/usr/lib/python2.7/site-packages:/home/rtevans/tacc_stats
-WSGIProcessGroup ls5
-WSGIScriptAlias / /home/rtevans/tacc_stats/tacc_stats/site/tacc_stats_site/wsgi.py
+ServerName stats.webserver.tacc.utexas.edu
+ServerAlias stats.webserver.tacc.utexas.edu
+
+WSGIDaemonProcess s2-stats python-home=/stats/stampede2 python-path=/stats/stampede2/tacc_stats:/stats/stampede2/lib/python3.7/site-packages user=rtevans
+WSGIProcessGroup s2-stats
+WSGIScriptAlias / /tacc_stats/site/tacc_stats_site/wsgi.py process-group=s2-stats
 WSGIApplicationGroup %{GLOBAL}
-<Directory /home/rtevans/tacc_stats/tacc_stats/site/tacc_stats_site>
+
+<Directory /stats/stampede2/tacc_stats/tacc_stats/site/tacc_stats_site>
 <Files wsgi.py>
 Require all granted
 </Files>
@@ -199,26 +200,21 @@ Require all granted
 ### Running `job_pickles.py`
 `job_pickles.py` can be run manually by:
 
-    $ ./job_pickles.py [-start date_start] [-end date_end] [-dir directory] [-jobids id0 id1 ... idn]
+    $ ./job_pickles.py [start_date] [end_date] [-dir directory] [-jobids id0 id1 ... idn]
 
 where the 4 optional arguments have the following meaning
 
-  - `-dir`       : the directory to store pickled dictionaries
-  - `-start`     : the start of the date range, e.g. `"2013-09-25 00:00:00"`
-  - `-end`       : the end of the date range, e.g. `"2013-09-26   00:00:00"`
-  - `jobids`     : individual jobids to pickle
-  -
+  - `start_date`     : the start of the date range, e.g. `"2013-09-25"` (default is today)
+  - `end_date`       : the end of the date range, e.g. `"2013-09-26"` (default is `start_date`)
+  - `-dir`       : the directory to store pickled dictionaries (default is set in tacc_stats.ini)
+  - `-jobids`     : individual jobids to pickle (default is all jobs)
+  
 No arguments results in all jobs from the previous day getting pickled and stored in the `pickles_dir`
-defined in `setup.cfg`. On Stampede argumentless `job_pickles.py` is run every 24 hours as a `cron` job
-set-up by the user
+defined in `tacc_stats.ini`. On Stampede argumentless `job_pickles.py` is run every 24 hours as a `cron` job
+set-up by the user.
 
-For pickling data with Intel Sandy Bridge core and uncore counters it is useful to
-modify the event_map dictionaries in `intel_snb.py` to include whatever events you are counting.The dictionaries map a control register value to a Schema name.  
-You can have events in the event_map dictionaries that you are not counting,
-but if missing an event it will be labeled in the Schema with it's control register
-value.
 
-### Pickled stats data: generated `job_pickles.sh`
+### Pickled data format: generated `job_pickles.py`
 
 Pickled stats data will be placed in the directory specified by
 `pickles_dir`.  The pickled data is contained in a nested python

@@ -3,13 +3,8 @@ ACLOCAL_AMFLAGS = -I m4
 bin_PROGRAMS = tacc_stats
 
 STATS_DIR_PATH = /var/log/tacc_stats
-STATS_LOCK_PATH= /var/lock/tacc_stats
-JOBID_FILE_PATH= /var/run/TACC_jobid
-
-if DEBUG
-tacc_stats_CFLAGS = \
-	-DDEBUG
-endif
+STATS_LOCK_PATH = /var/lock/tacc_stats
+JOBID_FILE_PATH = /var/run/TACC_jobid
 
 tacc_stats_CPPFLAGS = \
 	-D_GNU_SOURCE \
@@ -19,6 +14,11 @@ tacc_stats_CPPFLAGS = \
 	-DSTATS_LOCK_PATH=\"$(STATS_LOCK_PATH)\" \
 	-DJOBID_FILE_PATH=\"$(JOBID_FILE_PATH)\"
 
+if DEBUG
+tacc_stats_CPPFLAGS += \
+	-DDEBUG
+endif
+
 tacc_stats_SOURCES = \
 	collect.h \
 	collect.c \
@@ -26,9 +26,8 @@ tacc_stats_SOURCES = \
 	cpuid.c \
 	dict.h \
 	dict.c \
-	intel_hsw_uncore.h \
 	intel_pmc3.h \
-	intel_snb_uncore.h \
+	intel_pmc_uncore.h \
 	JOIN.h \
 	pci.h \
 	pci.c \
@@ -45,6 +44,8 @@ tacc_stats_SOURCES += \
 	monitor.c \
 	stats_buffer.c \
 	stats_buffer.h
+tacc_stats_CPPFLAGS += \
+	-DRABBITMQ
 else
 tacc_stats_SOURCES += \
 	main.c \
@@ -57,7 +58,6 @@ TYPES 	= \
 	cpu.c \
 	mem.c \
 	net.c \
-	nfs.c \
 	numa.c \
 	proc.c \
 	ps.c \
@@ -69,31 +69,35 @@ TYPES 	= \
 if HARDWARE
 TYPES 	+= \
 	amd64_pmc.c \
-	intel_hsw.c \
+	intel_4pmc3.c \
+	intel_8pmc3.c \
+	intel_bdw_cbo.c \
+	intel_bdw_hau.c \
+	intel_bdw_imc.c \
+	intel_bdw_qpi.c \
+	intel_bdw_r2pci.c \
 	intel_hsw_cbo.c \
 	intel_hsw_hau.c \
 	intel_hsw_imc.c \
-	intel_hsw_pcu.c \
 	intel_hsw_qpi.c \
 	intel_hsw_r2pci.c \
-	intel_ivb.c \
 	intel_ivb_cbo.c \
 	intel_ivb_hau.c \
 	intel_ivb_imc.c \
-	intel_ivb_pcu.c \
 	intel_ivb_qpi.c \
 	intel_ivb_r2pci.c \
 	intel_knl.c \
-	intel_nhm.c \
+	intel_knl_edc.c \
+	intel_knl_mc.c \
+	intel_pcu.c \
 	intel_rapl.c \
-	intel_snb.c \
+	intel_skx_cha.c \
+	intel_skx_imc.c \
 	intel_snb_cbo.c \
 	intel_snb_hau.c \
 	intel_snb_imc.c \
-	intel_snb_pcu.c \
 	intel_snb_qpi.c \
-	intel_snb_r2pci.c \
-	intel_wtm.c
+	intel_snb_r2pci.c
 endif
 
 if INFINIBAND
@@ -120,7 +124,6 @@ tacc_stats_SOURCES += \
 TYPES += \
 	mdc.c \
 	llite.c \
-	lnet.c \
 	osc.c
 endif
 
@@ -140,6 +143,13 @@ tacc_stats_LDFLAGS += \
 nodist_tacc_stats_SOURCES = \
 	stats.x
 
+if GPU
+nodist_tacc_stats_SOURCES += \
+	nvml.h 
+TYPES += \
+	nvidia_gpu.c
+endif
+
 BUILT_SOURCES = stats.x
 CLEANFILES = stats.x
 stats.o: stats.x
@@ -150,6 +160,7 @@ if RABBITMQ
 initddir = $(sysconfdir)/rc.d/init.d
 initd_SCRIPTS = taccstats
 sysconf_DATA = tacc_stats.conf
+sysconf_DATA += taccstats.service
 BUILT_SOURCES += taccstats
 nodist_tacc_stats_SOURCES += \
 	taccstats
@@ -165,4 +176,4 @@ else
 bin_SCRIPTS = archive
 endif
 
-EXTRA_DIST = taccstats.in tacc_stats.conf archive
+EXTRA_DIST = taccstats.in tacc_stats.conf archive taccstats.service
